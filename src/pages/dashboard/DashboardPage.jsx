@@ -1,11 +1,11 @@
-import { Users, DollarSign, TrendingUp, ShoppingCart } from 'lucide-react'
+import { Users, DollarSign, TrendingUp, ShoppingCart, TrendingDown } from 'lucide-react'
 import StatCard from '@/components/ui/StatCard'
 
 const stats = [
-  { label: 'Total Revenue', value: '$48,295', delta: 12.5, icon: DollarSign },
-  { label: 'Active Users', value: '3,842', delta: 8.1, icon: Users },
-  { label: 'Conversion Rate', value: '4.6%', delta: -1.2, icon: TrendingUp },
-  { label: 'Total Orders', value: '1,073', delta: 5.3, icon: ShoppingCart },
+  { label: 'Events', value: '5412', delta: 12.5, icon: TrendingUp },
+  { label: 'Conflict Intensity', value: '58%', delta: 8.1, icon: TrendingUp },
+  { label: 'Active Actors', value: '4.6%', delta: 1.3, icon: TrendingUp },
+  { label: 'Media Mentions', value: '8003', delta: -14, icon: TrendingDown },
 ]
 
 export default function DashboardPage() {
@@ -16,18 +16,33 @@ export default function DashboardPage() {
           <StatCard key={stat.label} {...stat} />
         ))}
       </div>
-      <div className="card">
-        <h2 className="text-base font-semibold text-gray-900">Revenue over time</h2>
-        <div className="mt-4 flex h-56 items-center justify-center rounded-lg bg-gray-50 text-sm text-gray-400">
-          [ Chart goes here ]
+
+      <div className="grid grid-cols-2 gap-6">
+        {/* Left column - Chart and Table */}
+        <div className="space-y-6">
+          <div className="card">
+            <h2 className="text-base font-semibold text-gray-900">Conflict Timeline</h2>
+            <div className="mt-4 flex h-56 items-center justify-center rounded-lg bg-gray-50 text-sm text-gray-400">
+              [ Chart goes here ]
+            </div>
+          </div>
+          <div className="card">
+            <h2 className="text-base font-semibold text-gray-900">Conflict Breakdown</h2>
+            <div className="mt-4 flex h-40 items-center justify-center rounded-lg bg-gray-50 text-sm text-gray-400">
+              [ Table goes here ]
+            </div>
+          </div>
+        </div>
+
+        {/* Right column - Map */}
+        <div className="card">
+          <h2 className="text-base font-semibold text-gray-900">Map</h2>
+          <div className="mt-4 h-[320px] flex items-center justify-center rounded-lg bg-gray-50 text-sm text-gray-400">
+            [ Map goes here ]
+          </div>
         </div>
       </div>
-      <div className="card">
-        <h2 className="text-base font-semibold text-gray-900">Recent activity</h2>
-        <div className="mt-4 flex h-40 items-center justify-center rounded-lg bg-gray-50 text-sm text-gray-400">
-          [ Table goes here ]
-        </div>
-      </div>
+
     </div>
   )
 }
