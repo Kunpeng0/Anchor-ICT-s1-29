@@ -1,4 +1,4 @@
-export default function AnalyticsPage() {
+export default function InsightsPage() {
   return (
     <div className="space-y-6">
       <div>

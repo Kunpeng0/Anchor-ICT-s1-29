@@ -1,7 +1,8 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import DashboardLayout from '@/components/layout/DashboardLayout'
-import OverviewPage from '@/pages/dashboard/OverviewPage'
-import AnalyticsPage from '@/pages/dashboard/AnalyticsPage'
+import DashboardPage from '@/pages/dashboard/DashboardPage'
+import InsightsPage from '@/pages/dashboard/InsightsPage'
+import ReportsPage from '@/pages/dashboard/ReportsPage'
 import SettingsPage from '@/pages/dashboard/SettingsPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 
@@ -14,8 +15,9 @@ export const router = createBrowserRouter([
     path: '/dashboard',
     element: <DashboardLayout />,
     children: [
-      { index: true, element: <OverviewPage /> },
-      { path: 'analytics', element: <AnalyticsPage /> },
+      { index: true, element: <DashboardPage /> },
+      { path: 'insights', element: <InsightsPage /> },
+      { path: 'reports', element: <ReportsPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },

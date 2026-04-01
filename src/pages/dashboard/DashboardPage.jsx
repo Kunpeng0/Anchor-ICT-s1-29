@@ -8,13 +8,9 @@ const stats = [
   { label: 'Total Orders', value: '1,073', delta: 5.3, icon: ShoppingCart },
 ]
 
-export default function OverviewPage() {
+export default function DashboardPage() {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Overview</h1>
-        <p className="mt-1 text-sm text-gray-500">Welcome back, Jane. Here's what's happening today.</p>
-      </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
           <StatCard key={stat.label} {...stat} />
