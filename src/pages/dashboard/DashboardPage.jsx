@@ -2,10 +2,10 @@ import { Users, DollarSign, TrendingUp, ShoppingCart, TrendingDown } from 'lucid
 import StatCard from '@/components/ui/StatCard'
 
 const stats = [
-  { label: 'Events', value: '5412', delta: 12.5, icon: TrendingUp },
-  { label: 'Conflict Intensity', value: '58%', delta: 8.1, icon: TrendingUp },
-  { label: 'Active Actors', value: '4.6%', delta: 1.3, icon: TrendingUp },
-  { label: 'Media Mentions', value: '8003', delta: -14, icon: TrendingDown },
+  { label: 'Events', value: '5412', delta: 12.5, icon: TrendingUp, tooltip: 'Tooltip used for description of metric cards' },
+  { label: 'Conflict Intensity', value: '58%', delta: 8.1, icon: TrendingUp, tooltip: 'Tooltip used for description of metric cards' },
+  { label: 'Active Actors', value: '4.6%', delta: 1.3, icon: TrendingUp, tooltip: 'Tooltip used for description of metric cards' },
+  { label: 'Media Mentions', value: '8003', delta: -14, icon: TrendingDown, tooltip: 'Tooltip used for description of metric cards' },
 ]
 
 export default function DashboardPage() {
