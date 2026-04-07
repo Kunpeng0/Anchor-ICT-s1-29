@@ -25,3 +25,12 @@ Thumbs.db
 # Editor folders
 .vscode/
 .idea/
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.Python
+*.db
+*.sqlite
