@@ -10,10 +10,26 @@ EVENTS = {
         "start_date": "2023-04-01",
         "end_date": None,  # None = ongoing, fetcher uses today's date
         "cameo_codes": [
-            "14",   # Protest, riot         TODO: replace with confirmed codes
-            "18",   # Assault               TODO: replace with confirmed codes
-            "19",   # Use of force, attack  TODO: replace with confirmed codes
-            "20",   # Mass violence         TODO: replace with confirmed codes
+            "01",   # Make public statement
+            "02",   # Appeal
+            "03",   # Express intent to cooperate
+            "04",   # Consult
+            "05",   # Engage in diplomatic cooperation
+            "06",   # Engage in material cooperation
+            "07",   # Provide aid
+            "08",   # Yield
+            "09",   # Investigate
+            "10",   # Demand
+            "11",   # Disapprove
+            "12",   # Reject
+            "13",   # Threaten
+            "14",   # Protest or hunger strike
+            "15",   # Demonstrate or rally
+            "16",   # Reduce relations
+            "17",   # Coerce
+            "18",   # Assault
+            "19",   # Use of force, attack
+            "20",   # Use unconventional mass violence
         ],
         "countries": ["SU"],  # GDELT country code for Sudan
     },
