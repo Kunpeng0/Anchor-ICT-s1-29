@@ -28,6 +28,7 @@ from backend.db.db import (
     get_event_volume,
     get_graph_ratings,
     get_location_frequency,
+    get_media_attention,
     get_recent_events,
     get_saved_graphs,
     get_tone_over_time,
@@ -36,6 +37,7 @@ from backend.db.db import (
     update_graph_visibility,
 )
 from backend.ingestion.fetcher import run_fetch
+from backend.llm.llm import call_llm
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -190,6 +192,20 @@ def tone_over_time(
     return get_tone_over_time(event_name, period_type=period_type)
 
 
+@app.get("/signals/{event_name}/media-attention", tags=["Signals"])
+def media_attention(
+    event_name: str,
+    period_type: str = Query(default="daily", pattern="^(daily|weekly)$"),
+) -> list[dict]:
+    """
+    Return total media mentions over time.
+    Queries the raw events table directly — no signal table required.
+    period_type: "daily" (default) or "weekly".
+    """
+    _validate_event(event_name)
+    return get_media_attention(event_name, period_type=period_type)
+
+
 @app.get("/signals/{event_name}/actor-location-graph", tags=["Signals"])
 def actor_location_graph(
     event_name: str,
@@ -215,13 +231,13 @@ def dashboard_summary(event_name: str) -> dict:
     """
     _validate_event(event_name)
     return {
-        "event_count":        get_event_count(event_name),
-        "event_volume":       get_event_volume(event_name, period_type="daily"),
-        "event_type":         get_event_type(event_name),
-        "top_actors":         get_actor_frequency(event_name, limit=10),
-        "top_locations":      get_location_frequency(event_name, limit=10),
-        "tone_over_time":     get_tone_over_time(event_name, period_type="weekly"),
-        "recent_events":      get_recent_events(event_name, limit=20),
+        "event_count":    get_event_count(event_name),
+        "event_volume":   get_event_volume(event_name, period_type="daily"),
+        "event_type":     get_event_type(event_name),
+        "top_actors":     get_actor_frequency(event_name, limit=10),
+        "top_locations":  get_location_frequency(event_name, limit=10),
+        "tone_over_time": get_tone_over_time(event_name, period_type="weekly"),
+        "recent_events":  get_recent_events(event_name, limit=20),
     }
 
 
@@ -337,7 +353,6 @@ def llm_query(body: LLMQueryRequest) -> dict:
             detail="LLM service unavailable. Please try again shortly.",
         )
 
-    # Route intent to the correct signal
     try:
         data = _resolve_intent(intent, event_name)
     except KeyError as e:
@@ -353,14 +368,10 @@ def llm_query(body: LLMQueryRequest) -> dict:
 
 def _call_llm(query: str) -> dict:
     """
-    Send the query to the local Ollama instance and return the parsed intent.
-    Placeholder — to be implemented by Tze Shen Ng.
-    Raises an exception if Ollama is unreachable.
+    Delegate to backend.llm.llm.call_llm().
+    All LLM logic lives in backend/llm/llm.py — edit that file, not this one.
     """
-    # TODO: replace with actual Ollama call
-    # Example expected return:
-    # { "chart_type": "line", "signal": "event_volume", "params": { "period_type": "daily" } }
-    raise NotImplementedError("Ollama LLM integration not yet implemented")
+    return call_llm(query)
 
 
 def _resolve_intent(intent: dict, event_name: str) -> list | dict:
@@ -377,6 +388,7 @@ def _resolve_intent(intent: dict, event_name: str) -> list | dict:
         "actor_frequency":      lambda: get_actor_frequency(event_name, **params),
         "location_frequency":   lambda: get_location_frequency(event_name, **params),
         "tone_over_time":       lambda: get_tone_over_time(event_name, **params),
+        "media_attention":      lambda: get_media_attention(event_name, **params),
         "actor_location_graph": lambda: get_actor_location_graph(event_name, **params),
         "recent_events":        lambda: get_recent_events(event_name, **params),
     }
@@ -396,14 +408,14 @@ def _validate_event(event_name: str) -> None:
     if event_name not in list_events():
         raise HTTPException(
             status_code=404,
-            detail=f"Event '{event_name}' not found. Available: {list_events()}",
+            detail=f"Event '{event_name}' not found. Available events: {list_events()}",
         )
 
 
 # ---------------------------------------------------------------------------
-# Run directly for development
+# Run directly
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)

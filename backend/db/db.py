@@ -193,6 +193,62 @@ def get_tone_over_time(
         conn.close()
 
 
+def get_media_attention(
+    event_name: str,
+    period_type: str = "daily",
+    db_path: str = DB_PATH,
+) -> list[dict]:
+    """
+    Return total media mentions aggregated by time period.
+
+    The raw events table is event-agnostic, so the event_name parameter is
+    preserved for API compatibility but not used in the current schema.
+    Queries the raw events table directly as no signal table exists for this.
+
+    Parameters
+    ----------
+    event_name : str
+        Key from event_config.EVENTS (e.g. "sudan_2023").
+    period_type : str
+        "daily" or "weekly".
+
+    Returns
+    -------
+    List of dicts with keys: period, total_mentions.
+    Ordered by period ascending.
+    """
+    conn = _connect(db_path)
+    try:
+        if period_type == "weekly":
+            cur = conn.execute(
+                """
+                SELECT
+                    strftime('%Y', event_date) || '-W' ||
+                    printf('%02d', strftime('%W', event_date)) AS period,
+                    SUM(num_mentions) AS total_mentions
+                FROM events
+                WHERE num_mentions IS NOT NULL
+                GROUP BY period
+                ORDER BY period ASC
+                """
+            )
+        else:
+            cur = conn.execute(
+                """
+                SELECT
+                    DATE(event_date) AS period,
+                    SUM(num_mentions) AS total_mentions
+                FROM events
+                WHERE num_mentions IS NOT NULL
+                GROUP BY period
+                ORDER BY period ASC
+                """
+            )
+        return [dict(row) for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+
 def get_actor_location_graph(
     event_name: str,
     min_edge_weight: int = 1,
@@ -226,7 +282,6 @@ def get_actor_location_graph(
         )
         rows = cur.fetchall()
 
-        # Build deduplicated node list
         actors = {row["actor"] for row in rows}
         locations = {row["location"] for row in rows}
         nodes = (
@@ -252,12 +307,14 @@ def get_event_count(
     db_path: str = DB_PATH,
 ) -> int:
     """
-    Return the total number of raw events ingested for the given event.
+    Return the total number of raw events ingested.
+
+    The raw events table is event-agnostic, so the event_name parameter is
+    preserved for API compatibility but not used in the current schema.
     Used for the total count summary card on the dashboard.
     """
     conn = _connect(db_path)
     try:
-        # events table has no event_config column — all rows are for the active event
         cur = conn.execute("SELECT COUNT(*) AS count FROM events")
         row = cur.fetchone()
         return row["count"] if row else 0
@@ -271,7 +328,10 @@ def get_recent_events(
     db_path: str = DB_PATH,
 ) -> list[dict]:
     """
-    Return the most recently ingested raw events for the given event.
+    Return the most recently ingested raw events.
+
+    The raw events table is event-agnostic, so the event_name parameter is
+    preserved for API compatibility but not used in the current schema.
     Used for the recent events table on the dashboard.
 
     Returns
@@ -427,7 +487,6 @@ def delete_graph(
     """
     conn = _connect(db_path)
     try:
-        # Delete ratings first to satisfy the foreign key reference
         conn.execute(
             "DELETE FROM graph_ratings WHERE saved_graph_id = ?",
             (graph_id,),
@@ -475,7 +534,6 @@ def rate_graph(
 
     conn = _connect(db_path)
     try:
-        # Verify the graph exists before inserting
         cur = conn.execute(
             "SELECT id FROM saved_graphs WHERE id = ?",
             (saved_graph_id,),

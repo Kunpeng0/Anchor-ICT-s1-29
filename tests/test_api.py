@@ -102,8 +102,12 @@ def make_test_db() -> str:
         );
     """)
 
+    # Seed events — num_mentions populated to support media attention endpoint tests
     conn.executemany(
-        "INSERT INTO events (event_id, event_date, cameo_code, actor1, country, location, goldstein_scale, num_mentions, source_url) VALUES (?,?,?,?,?,?,?,?,?)",
+        """INSERT INTO events
+           (event_id, event_date, cameo_code, actor1, country, location,
+            goldstein_scale, num_mentions, source_url)
+           VALUES (?,?,?,?,?,?,?,?,?)""",
         [
             ("E001", "2024-01-01", "190", "SAF", "SU", "Khartoum", -10.0, 5, "http://a.com/1"),
             ("E002", "2024-01-01", "181", "RSF", "SU", "Omdurman",  -7.0, 3, "http://a.com/2"),
@@ -123,7 +127,7 @@ def make_test_db() -> str:
         [
             ("sudan_2023", "19", "Use of force", 3),
             ("sudan_2023", "18", "Assault",      1),
-            ("sudan_2023", "14", "Protest",       1),
+            ("sudan_2023", "14", "Protest",      1),
         ]
     )
     conn.executemany(
@@ -161,7 +165,7 @@ def get_client(db_path: str) -> TestClient:
     _db.DB_PATH = db_path
     for fn in [
         _db.get_event_volume, _db.get_event_type, _db.get_actor_frequency,
-        _db.get_location_frequency, _db.get_tone_over_time,
+        _db.get_location_frequency, _db.get_tone_over_time, _db.get_media_attention,
         _db.get_actor_location_graph, _db.get_event_count, _db.get_recent_events,
         _db.get_saved_graphs, _db.save_graph, _db.update_graph_visibility,
         _db.delete_graph, _db.rate_graph, _db.get_graph_ratings,
@@ -171,7 +175,6 @@ def get_client(db_path: str) -> TestClient:
             defaults[-1] = db_path
             fn.__defaults__ = tuple(defaults)
     return TestClient(app, raise_server_exceptions=True)
-
 
 
 # ---------------------------------------------------------------------------
@@ -223,7 +226,7 @@ def test_event_volume_weekly(db):
 def test_event_volume_invalid_period_type(db):
     client = get_client(db)
     r = client.get("/signals/sudan_2023/event-volume?period_type=monthly")
-    assert r.status_code == 422  # FastAPI validation error
+    assert r.status_code == 422
     print("  PASS — GET /signals/sudan_2023/event-volume?period_type=monthly returns 422")
 
 
@@ -234,7 +237,7 @@ def test_event_type(db):
     data = r.json()
     assert len(data) == 3
     assert data[0]["cameo_root"] == "19"
-    print(f"  PASS — GET /signals/sudan_2023/event-type: {len(data)} roots")
+    print(f"  PASS — GET /signals/sudan_2023/event-type: {len(data)} rows, top={data[0]['cameo_root']}")
 
 
 def test_actor_frequency(db):
@@ -244,7 +247,7 @@ def test_actor_frequency(db):
     data = r.json()
     assert len(data) == 1
     assert data[0]["actor"] == "SAF"
-    print(f"  PASS — GET /signals/sudan_2023/actor-frequency?limit=1: {data}")
+    print(f"  PASS — GET /signals/sudan_2023/actor-frequency?limit=1: {data[0]}")
 
 
 def test_location_frequency(db):
@@ -252,8 +255,9 @@ def test_location_frequency(db):
     r = client.get("/signals/sudan_2023/location-frequency")
     assert r.status_code == 200
     data = r.json()
+    assert len(data) == 2
     assert data[0]["location"] == "Khartoum"
-    print(f"  PASS — GET /signals/sudan_2023/location-frequency: top is {data[0]['location']}")
+    print(f"  PASS — GET /signals/sudan_2023/location-frequency: {len(data)} rows")
 
 
 def test_tone_over_time(db):
@@ -263,7 +267,39 @@ def test_tone_over_time(db):
     data = r.json()
     assert len(data) == 1
     assert data[0]["period"] == "2024-W01"
-    print(f"  PASS — GET /signals/sudan_2023/tone-over-time: {data[0]}")
+    print(f"  PASS — GET /signals/sudan_2023/tone-over-time?period_type=weekly: {data[0]}")
+
+
+def test_media_attention_daily(db):
+    client = get_client(db)
+    r = client.get("/signals/sudan_2023/media-attention?period_type=daily")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data) == 2
+    assert data[0]["period"] == "2024-01-01"
+    # E001 (5) + E002 (3) = 8 on 2024-01-01
+    assert data[0]["total_mentions"] == 8
+    print(f"  PASS — GET /signals/sudan_2023/media-attention?period_type=daily: {len(data)} rows, first={data[0]}")
+
+
+def test_media_attention_weekly(db):
+    client = get_client(db)
+    r = client.get("/signals/sudan_2023/media-attention?period_type=weekly")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data) == 1
+    assert "period" in data[0]
+    assert "total_mentions" in data[0]
+    # E001 (5) + E002 (3) + E003 (2) = 10
+    assert data[0]["total_mentions"] == 10
+    print(f"  PASS — GET /signals/sudan_2023/media-attention?period_type=weekly: {data[0]}")
+
+
+def test_media_attention_invalid_period_type(db):
+    client = get_client(db)
+    r = client.get("/signals/sudan_2023/media-attention?period_type=monthly")
+    assert r.status_code == 422
+    print("  PASS — GET /signals/sudan_2023/media-attention?period_type=monthly returns 422")
 
 
 def test_actor_location_graph(db):
@@ -280,11 +316,11 @@ def test_unknown_event_returns_404(db):
     client = get_client(db)
     r = client.get("/signals/nonexistent/event-volume")
     assert r.status_code == 404
-    print("  PASS — Unknown event returns 404")
+    print("  PASS — GET /signals/nonexistent/event-volume returns 404")
 
 
 # ---------------------------------------------------------------------------
-# Tests — dashboard summary
+# Tests — dashboard endpoints
 # ---------------------------------------------------------------------------
 
 def test_dashboard_summary(db):
@@ -452,6 +488,9 @@ if __name__ == "__main__":
         test_actor_frequency,
         test_location_frequency,
         test_tone_over_time,
+        test_media_attention_daily,
+        test_media_attention_weekly,
+        test_media_attention_invalid_period_type,
         test_actor_location_graph,
         test_unknown_event_returns_404,
         test_dashboard_summary,

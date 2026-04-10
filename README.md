@@ -23,6 +23,8 @@ Anchor-ICT-s1-29/
 │   ├── db/
 │   │   ├── init_db.py                Database schema creation
 │   │   └── db.py                     Query functions for FastAPI
+│   ├── llm/
+│   │   └── llm.py                    Ollama integration and intent parsing
 │   └── ingestion/
 │       ├── fetcher.py                GDELT ingestion pipeline
 │       └── signal_builder.py         Signal aggregation
@@ -55,7 +57,8 @@ Anchor-ICT-s1-29/
 │   ├── test_fetcher.py               15/15 passing
 │   ├── test_signal_builder.py        14/14 passing
 │   ├── test_db.py                    24/24 passing
-│   └── test_api.py                   22/22 passing
+│   ├── test_api.py                   22/22 passing
+│   └── test_llm.py                   8/8 passing
 ├── index.html
 ├── package.json
 ├── postcss.config.js
@@ -104,6 +107,9 @@ venv\Scripts\activate
 ```bash
 pip install -r requirements.txt
 ```
+
+> Note: the raw `events` table stores ingested GDELT rows without an `event_config` label.
+> Signal tables such as `signals_event_volume` and `signals_actor_frequency` are event-specific.
 
 ### 3. Initialise the database
 
@@ -155,6 +161,7 @@ The API will be available at http://localhost:8000. Interactive docs at http://l
 | GET | /signals/{event}/location-frequency | Top locations |
 | GET | /signals/{event}/tone-over-time | Goldstein scale trend |
 | GET | /signals/{event}/actor-location-graph | Network graph nodes and edges |
+| GET | /signals/{event}/media-attention | Total mentions over time |
 | GET | /dashboard/{event}/summary | All dashboard data in one call |
 | GET | /dashboard/{event}/recent-events | Recent raw events table |
 | POST | /query | LLM natural language query |
@@ -162,8 +169,18 @@ The API will be available at http://localhost:8000. Interactive docs at http://l
 | PATCH | /graphs/{id}/visibility | Show or hide a saved graph |
 | DELETE | /graphs/{id} | Delete a saved graph |
 | POST/GET | /graphs/{id}/rate | Thumbs up/down rating |
-
+> Note: `/dashboard/{event}/summary`, `/dashboard/{event}/recent-events`, and `/signals/{event}/media-attention`
+> read from the shared raw `events` table, which is stored event-agnostically.
 Full interactive documentation available at http://localhost:8000/docs when the API is running.
+
+## Code Documentation
+
+Backend-only documentation is available in the `docs` folder:
+
+- `docs/README.md` — Documentation index and navigation.
+- `docs/backend.md` — Backend module and API function reference.
+
+Note: frontend code is not documented here yet; this docs set currently covers backend services only.
 
 ---
 
@@ -175,9 +192,10 @@ python tests/test_fetcher.py
 python tests/test_signal_builder.py
 python tests/test_db.py
 python tests/test_api.py
+python tests/test_llm.py
 ```
 
-Expected result: 81/81 tests passing.
+Expected result: 89/89 tests passing.
 
 ---
 
@@ -185,4 +203,4 @@ Expected result: 81/81 tests passing.
 
 - anchor.db is excluded from version control. Each team member generates their own by following the backend setup steps above.
 - CAMEO event codes for the Sudan conflict are placeholders pending confirmation from Hamish Pratt. When confirmed, update cameo_codes in backend/config/event_config.py only and re-run the backfill. No other files need to change.
-- The LLM query endpoint (POST /query) returns HTTP 503 until the Ollama integration is completed by Tze Shen Ng.
+- The LLM query endpoint (POST /query) requires Ollama running locally on port 11434. Update `OLLAMA_BASE_URL` and `OLLAMA_MODEL` in backend/llm/llm.py if using a different host, port, or model name.
