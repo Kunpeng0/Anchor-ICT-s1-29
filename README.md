@@ -140,6 +140,10 @@ python3 - << 'EOF'
 from backend.ingestion.signal_builder import build_all_signals
 build_all_signals("sudan_2023")
 EOF
+
+# Windows
+python -c "from backend.ingestion.signal_builder import build_all_signals; build_all_signals('sudan_2023')"
+
 ```
 
 ### 6. Start the API
