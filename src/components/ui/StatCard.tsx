@@ -1,4 +1,14 @@
-export default function StatCard({ label, value, delta, icon: Icon, tooltip }) {
+import { LucideIcon } from "lucide-react"
+
+interface StatCardProps {
+  label: string
+  value: string
+  delta: number
+  icon: LucideIcon
+  tooltip?: string
+}
+
+export default function StatCard({ label, value, delta, icon: Icon, tooltip }: StatCardProps) {
   const positive = delta >= 0
   return (
     <div className="card flex items-start justify-between">
