@@ -128,6 +128,9 @@ python3 - << 'EOF'
 from backend.ingestion.fetcher import run_backfill
 run_backfill("sudan_2023", start_date="2023-04-01")
 EOF
+
+# Windows
+python -c "from backend.ingestion.fetcher import run_backfill; run_backfill('sudan_2023', start_date='2023-04-01')"
 ```
 
 ### 5. Build the signals
