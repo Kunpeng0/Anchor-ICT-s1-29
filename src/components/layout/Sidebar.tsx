@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, BarChart2, Settings, LogOut } from 'lucide-react'
+import { LayoutDashboard, BarChart2, Settings, LogOut, FlaskConical } from 'lucide-react'
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/dashboard/insights', label: 'Insights', icon: BarChart2 },
   { to: '/dashboard/reports', label: 'Reports', icon: BarChart2 },
   { to: '/dashboard/settings', label: 'Settings', icon: Settings },
+  { to: '/dashboard/backend-test', label: 'Backend Test', icon: FlaskConical },
 ]
 
 export default function Sidebar() {
