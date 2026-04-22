@@ -18,7 +18,7 @@ import {
   Terminal,
 } from 'lucide-react'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// Types
 
 type Status = 'idle' | 'loading' | 'success' | 'error'
 
@@ -29,11 +29,11 @@ interface TestResult {
   duration?: number
 }
 
-// ─── Config ───────────────────────────────────────────────────────────────────
+// Config 
 
 const BASE_URL = 'http://localhost:8000'
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// Helpers
 
 async function callApi(
   path: string,
@@ -55,7 +55,7 @@ async function callApi(
   return { data, duration }
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// Sub-components
 
 function StatusBadge({ status }: { status: Status }) {
   if (status === 'idle') return null
@@ -123,7 +123,7 @@ function ResultPanel({ result }: { result: TestResult }) {
   )
 }
 
-// ─── Reusable test card ───────────────────────────────────────────────────────
+// Reusable test card
 
 interface Field {
   key: string
@@ -223,8 +223,7 @@ function TestCard({ icon, title, description, fields, onRun, accent = 'bg-brand-
   )
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
+// Page
 export default function BackendTestPage() {
   return (
     <div className="space-y-6">
@@ -241,7 +240,7 @@ export default function BackendTestPage() {
         </p>
       </div>
 
-      {/* ── Signal Query Functions ─────────────────────────────────────── */}
+      {/* Signal Query Functions */}
       <Section title="Signal Query Functions" subtitle="Pre-aggregated signal table reads">
         <TestCard
           icon={<Activity className="h-4 w-4" />}
@@ -360,7 +359,7 @@ export default function BackendTestPage() {
         />
       </Section>
 
-      {/* ── Dashboard Summary Functions ────────────────────────────────── */}
+      {/* Dashboard Summary Functions */}
       <Section title="Dashboard Summary Functions" subtitle="Quick counts and recent event rows">
         <TestCard
           icon={<Hash className="h-4 w-4" />}
@@ -394,7 +393,7 @@ export default function BackendTestPage() {
         />
       </Section>
 
-      {/* ── Saved Graph Functions ──────────────────────────────────────── */}
+      {/* Saved Graph Functions */}
       <Section title="Saved Graph Functions" subtitle="Create, retrieve, hide and delete saved graphs">
         <TestCard
           icon={<BookMarked className="h-4 w-4" />}
@@ -476,7 +475,7 @@ export default function BackendTestPage() {
         />
       </Section>
 
-      {/* ── Rating Functions ───────────────────────────────────────────── */}
+      {/* Rating Functions */}
       <Section title="Rating Functions" subtitle="Developer-facing thumbs up / down on saved graphs">
         <TestCard
           icon={<Star className="h-4 w-4" />}
@@ -516,7 +515,7 @@ export default function BackendTestPage() {
   )
 }
 
-// ─── Section wrapper ──────────────────────────────────────────────────────────
+// Section wrapper
 
 function Section({
   title,
