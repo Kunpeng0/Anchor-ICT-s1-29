@@ -253,7 +253,7 @@ export default function BackendTestPage() {
           ]}
           onRun={async v => {
             const { data, duration } = await callApi(
-              `/api/event-volume?event_name=${v.event_name}&period_type=${v.period_type}`
+              `/signals/${v.event_name}/event-volume?period_type=${v.period_type}`
             )
             return { data, duration }
           }}
@@ -268,7 +268,7 @@ export default function BackendTestPage() {
             { key: 'event_name', label: 'event_name', placeholder: 'e.g. sudan_2023', defaultValue: 'sudan_2023' },
           ]}
           onRun={async v => {
-            const { data, duration } = await callApi(`/api/event-type?event_name=${v.event_name}`)
+            const { data, duration } = await callApi(`/signals/${v.event_name}/event-type`)
             return { data, duration }
           }}
         />
@@ -284,7 +284,7 @@ export default function BackendTestPage() {
           ]}
           onRun={async v => {
             const { data, duration } = await callApi(
-              `/api/actor-frequency?event_name=${v.event_name}&limit=${v.limit}`
+              `/signals/${v.event_name}/actor-frequency?limit=${v.limit}`
             )
             return { data, duration }
           }}
@@ -301,7 +301,7 @@ export default function BackendTestPage() {
           ]}
           onRun={async v => {
             const { data, duration } = await callApi(
-              `/api/location-frequency?event_name=${v.event_name}&limit=${v.limit}`
+              `/signals/${v.event_name}/location-frequency?limit=${v.limit}`
             )
             return { data, duration }
           }}
@@ -318,7 +318,7 @@ export default function BackendTestPage() {
           ]}
           onRun={async v => {
             const { data, duration } = await callApi(
-              `/api/tone-over-time?event_name=${v.event_name}&period_type=${v.period_type}`
+              `/signals/${v.event_name}/tone-over-time?period_type=${v.period_type}`
             )
             return { data, duration }
           }}
@@ -335,7 +335,7 @@ export default function BackendTestPage() {
           ]}
           onRun={async v => {
             const { data, duration } = await callApi(
-              `/api/media-attention?event_name=${v.event_name}&period_type=${v.period_type}`
+              `/signals/${v.event_name}/media-attention?period_type=${v.period_type}`
             )
             return { data, duration }
           }}
@@ -352,7 +352,7 @@ export default function BackendTestPage() {
           ]}
           onRun={async v => {
             const { data, duration } = await callApi(
-              `/api/actor-location-graph?event_name=${v.event_name}&min_edge_weight=${v.min_edge_weight}`
+              `/signals/${v.event_name}/actor-location-graph?min_edge_weight=${v.min_edge_weight}`
             )
             return { data, duration }
           }}
@@ -370,7 +370,7 @@ export default function BackendTestPage() {
             { key: 'event_name', label: 'event_name', placeholder: 'e.g. sudan_2023', defaultValue: 'sudan_2023' },
           ]}
           onRun={async v => {
-            const { data, duration } = await callApi(`/api/event-count?event_name=${v.event_name}`)
+            const { data, duration } = await callApi(`/dashboard/${v.event_name}/summary`)
             return { data, duration }
           }}
         />
@@ -386,7 +386,7 @@ export default function BackendTestPage() {
           ]}
           onRun={async v => {
             const { data, duration } = await callApi(
-              `/api/recent-events?event_name=${v.event_name}&limit=${v.limit}`
+              `/dashboard/${v.event_name}/recent-events?limit=${v.limit}`
             )
             return { data, duration }
           }}
@@ -412,7 +412,7 @@ export default function BackendTestPage() {
           ]}
           onRun={async v => {
             const { data, duration } = await callApi(
-              `/api/saved-graphs?event_name=${v.event_name}&include_hidden=${v.include_hidden}`
+              `/graphs/${v.event_name}?include_hidden=${v.include_hidden}`
             )
             return { data, duration }
           }}
@@ -430,8 +430,7 @@ export default function BackendTestPage() {
             { key: 'label', label: 'label (optional)', placeholder: 'My graph' },
           ]}
           onRun={async v => {
-            const { data, duration } = await callApi('/api/save-graph', 'POST', {
-              event_name: v.event_name,
+            const { data, duration } = await callApi(`/graphs/${v.event_name}`, 'POST', {
               query_text: v.query_text,
               intent_json: v.intent_json,
               label: v.label || null,
@@ -450,7 +449,7 @@ export default function BackendTestPage() {
             { key: 'visible', label: 'visible', type: 'select', options: ['true', 'false'], defaultValue: 'true' },
           ]}
           onRun={async v => {
-            const { data, duration } = await callApi('/api/update-graph-visibility', 'POST', {
+            const { data, duration } = await callApi(`/graphs/${v.graph_id}/visibility`, 'PATCH', {
               graph_id: Number(v.graph_id),
               visible: v.visible === 'true',
             })
@@ -467,7 +466,7 @@ export default function BackendTestPage() {
             { key: 'graph_id', label: 'graph_id', type: 'number', placeholder: '1', defaultValue: '1' },
           ]}
           onRun={async v => {
-            const { data, duration } = await callApi('/api/delete-graph', 'POST', {
+            const { data, duration } = await callApi(`/graphs/${v.graph_id}`, 'DELETE', {
               graph_id: Number(v.graph_id),
             })
             return { data, duration }
@@ -487,7 +486,7 @@ export default function BackendTestPage() {
             { key: 'rating', label: 'rating', type: 'select', options: ['1', '-1'], defaultValue: '1' },
           ]}
           onRun={async v => {
-            const { data, duration } = await callApi('/api/rate-graph', 'POST', {
+            const { data, duration } = await callApi(`/graphs/${v.saved_graph_id}/rate`, 'POST', {
               saved_graph_id: Number(v.saved_graph_id),
               rating: Number(v.rating),
             })
@@ -505,7 +504,7 @@ export default function BackendTestPage() {
           ]}
           onRun={async v => {
             const { data, duration } = await callApi(
-              `/api/graph-ratings?saved_graph_id=${v.saved_graph_id}`
+              `/graphs/${v.saved_graph_id}/ratings`
             )
             return { data, duration }
           }}
