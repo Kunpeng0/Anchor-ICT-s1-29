@@ -1,3 +1,539 @@
+import { useState } from 'react'
+import {
+  Activity,
+  Users,
+  MapPin,
+  BarChart2,
+  Newspaper,
+  Network,
+  BookMarked,
+  Star,
+  ClipboardList,
+  Hash,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  Terminal,
+} from 'lucide-react'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type Status = 'idle' | 'loading' | 'success' | 'error'
+
+interface TestResult {
+  status: Status
+  data?: unknown
+  error?: string
+  duration?: number
+}
+
+// ─── Config ───────────────────────────────────────────────────────────────────
+
+const BASE_URL = 'http://localhost:8000'
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+async function callApi(
+  path: string,
+  method = 'GET',
+  body?: object
+): Promise<{ data: unknown; duration: number }> {
+  const start = performance.now()
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  const duration = Math.round(performance.now() - start)
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`${res.status} ${res.statusText}: ${text}`)
+  }
+  const data = await res.json()
+  return { data, duration }
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function StatusBadge({ status }: { status: Status }) {
+  if (status === 'idle') return null
+  if (status === 'loading')
+    return (
+      <span className="flex items-center gap-1 text-xs font-medium text-brand-600">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Running…
+      </span>
+    )
+  if (status === 'success')
+    return (
+      <span className="flex items-center gap-1 text-xs font-medium text-emerald-600">
+        <CheckCircle2 className="h-3.5 w-3.5" /> OK
+      </span>
+    )
+  return (
+    <span className="flex items-center gap-1 text-xs font-medium text-red-500">
+      <XCircle className="h-3.5 w-3.5" /> Error
+    </span>
+  )
+}
+
+function ResultPanel({ result }: { result: TestResult }) {
+  const [open, setOpen] = useState(true)
+  if (result.status === 'idle' || result.status === 'loading') return null
+
+  const isError = result.status === 'error'
+  const content = isError
+    ? result.error
+    : JSON.stringify(result.data, null, 2)
+
+  return (
+    <div
+      className={`mt-3 rounded-lg border text-xs font-mono ${
+        isError
+          ? 'border-red-200 bg-red-50 text-red-700'
+          : 'border-gray-200 bg-gray-50 text-gray-800'
+      }`}
+    >
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex w-full items-center justify-between px-3 py-2 text-left"
+      >
+        <span className="flex items-center gap-1.5 font-sans text-xs font-medium text-gray-500">
+          <Terminal className="h-3.5 w-3.5" />
+          {isError ? 'Error' : `Response`}
+          {result.duration != null && !isError && (
+            <span className="ml-1 rounded bg-gray-200 px-1.5 py-0.5 text-gray-500">
+              {result.duration}ms
+            </span>
+          )}
+        </span>
+        {open ? (
+          <ChevronUp className="h-3.5 w-3.5 text-gray-400" />
+        ) : (
+          <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+        )}
+      </button>
+      {open && (
+        <pre className="max-h-64 overflow-auto border-t border-gray-200 px-3 py-2 text-xs leading-relaxed">
+          {content}
+        </pre>
+      )}
+    </div>
+  )
+}
+
+// ─── Reusable test card ───────────────────────────────────────────────────────
+
+interface Field {
+  key: string
+  label: string
+  placeholder?: string
+  defaultValue?: string
+  type?: 'text' | 'number' | 'select'
+  options?: string[]
+}
+
+interface TestCardProps {
+  icon: React.ReactNode
+  title: string
+  description: string
+  fields: Field[]
+  onRun: (values: Record<string, string>) => Promise<unknown>
+  accent?: string
+}
+
+function TestCard({ icon, title, description, fields, onRun, accent = 'bg-brand-600' }: TestCardProps) {
+  const init = Object.fromEntries(
+    fields.map(f => [f.key, f.defaultValue ?? ''])
+  )
+  const [values, setValues] = useState<Record<string, string>>(init)
+  const [result, setResult] = useState<TestResult>({ status: 'idle' })
+
+  const handleRun = async () => {
+    setResult({ status: 'loading' })
+    try {
+      const data = await onRun(values)
+      setResult({ status: 'success', data, duration: (data as { duration?: number }).duration })
+    } catch (e) {
+      setResult({ status: 'error', error: (e as Error).message })
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="flex items-start gap-3">
+        <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg ${accent} text-white`}>
+          {icon}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+            <StatusBadge status={result.status} />
+          </div>
+          <p className="mt-0.5 text-xs text-gray-500">{description}</p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        {fields.map(f => (
+          <div key={f.key} className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">{f.label}</label>
+            {f.type === 'select' ? (
+              <select
+                value={values[f.key]}
+                onChange={e => setValues(v => ({ ...v, [f.key]: e.target.value }))}
+                className="rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-800 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-200"
+              >
+                {f.options?.map(o => (
+                  <option key={o} value={o}>
+                    {o}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type={f.type ?? 'text'}
+                value={values[f.key]}
+                placeholder={f.placeholder}
+                onChange={e => setValues(v => ({ ...v, [f.key]: e.target.value }))}
+                className="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-gray-800 placeholder-gray-400 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-200"
+              />
+            )}
+          </div>
+        ))}
+      </div>
+
+      <button
+        onClick={handleRun}
+        disabled={result.status === 'loading'}
+        className="btn-primary mt-4 flex w-full items-center justify-center gap-1.5 disabled:opacity-50"
+      >
+        {result.status === 'loading' ? (
+          <>
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Running…
+          </>
+        ) : (
+          'Run'
+        )}
+      </button>
+
+      <ResultPanel result={result} />
+    </div>
+  )
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function BackendTestPage() {
-  return <div>Backend Test Page</div>
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="card">
+        <h2 className="text-base font-semibold text-gray-900">Backend Test Console</h2>
+        <p className="mt-0.5 text-xs text-gray-500">
+          Test all{' '}
+          <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-gray-700">db.py</code>{' '}
+          functions against local{' '}
+          <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-gray-700">anchor.db</code>.
+          FastAPI must be running on{' '}
+          <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-gray-700">localhost:8000</code>.
+        </p>
+      </div>
+
+      {/* ── Signal Query Functions ─────────────────────────────────────── */}
+      <Section title="Signal Query Functions" subtitle="Pre-aggregated signal table reads">
+        <TestCard
+          icon={<Activity className="h-4 w-4" />}
+          title="get_event_volume()"
+          description="Daily or weekly event counts from signals_event_volume."
+          accent="bg-brand-600"
+          fields={[
+            { key: 'event_name', label: 'event_name', placeholder: 'e.g. sudan_2023', defaultValue: 'sudan_2023' },
+            { key: 'period_type', label: 'period_type', type: 'select', options: ['daily', 'weekly'], defaultValue: 'daily' },
+          ]}
+          onRun={async v => {
+            const { data, duration } = await callApi(
+              `/api/event-volume?event_name=${v.event_name}&period_type=${v.period_type}`
+            )
+            return { data, duration }
+          }}
+        />
+
+        <TestCard
+          icon={<Hash className="h-4 w-4" />}
+          title="get_event_type()"
+          description="Event counts grouped by CAMEO root code from signals_event_type."
+          accent="bg-violet-600"
+          fields={[
+            { key: 'event_name', label: 'event_name', placeholder: 'e.g. sudan_2023', defaultValue: 'sudan_2023' },
+          ]}
+          onRun={async v => {
+            const { data, duration } = await callApi(`/api/event-type?event_name=${v.event_name}`)
+            return { data, duration }
+          }}
+        />
+
+        <TestCard
+          icon={<Users className="h-4 w-4" />}
+          title="get_actor_frequency()"
+          description="Top N actors by event count from signals_actor_frequency."
+          accent="bg-sky-600"
+          fields={[
+            { key: 'event_name', label: 'event_name', placeholder: 'e.g. sudan_2023', defaultValue: 'sudan_2023' },
+            { key: 'limit', label: 'limit', type: 'number', placeholder: '10', defaultValue: '10' },
+          ]}
+          onRun={async v => {
+            const { data, duration } = await callApi(
+              `/api/actor-frequency?event_name=${v.event_name}&limit=${v.limit}`
+            )
+            return { data, duration }
+          }}
+        />
+
+        <TestCard
+          icon={<MapPin className="h-4 w-4" />}
+          title="get_location_frequency()"
+          description="Top N locations by event count from signals_location_frequency."
+          accent="bg-emerald-600"
+          fields={[
+            { key: 'event_name', label: 'event_name', placeholder: 'e.g. sudan_2023', defaultValue: 'sudan_2023' },
+            { key: 'limit', label: 'limit', type: 'number', placeholder: '10', defaultValue: '10' },
+          ]}
+          onRun={async v => {
+            const { data, duration } = await callApi(
+              `/api/location-frequency?event_name=${v.event_name}&limit=${v.limit}`
+            )
+            return { data, duration }
+          }}
+        />
+
+        <TestCard
+          icon={<BarChart2 className="h-4 w-4" />}
+          title="get_tone_over_time()"
+          description="Average Goldstein scale per period from signals_tone_over_time."
+          accent="bg-amber-600"
+          fields={[
+            { key: 'event_name', label: 'event_name', placeholder: 'e.g. sudan_2023', defaultValue: 'sudan_2023' },
+            { key: 'period_type', label: 'period_type', type: 'select', options: ['weekly', 'daily'], defaultValue: 'weekly' },
+          ]}
+          onRun={async v => {
+            const { data, duration } = await callApi(
+              `/api/tone-over-time?event_name=${v.event_name}&period_type=${v.period_type}`
+            )
+            return { data, duration }
+          }}
+        />
+
+        <TestCard
+          icon={<Newspaper className="h-4 w-4" />}
+          title="get_media_attention()"
+          description="Sum of num_mentions per period, queried directly from the events table."
+          accent="bg-rose-600"
+          fields={[
+            { key: 'event_name', label: 'event_name', placeholder: 'e.g. sudan_2023', defaultValue: 'sudan_2023' },
+            { key: 'period_type', label: 'period_type', type: 'select', options: ['daily', 'weekly'], defaultValue: 'daily' },
+          ]}
+          onRun={async v => {
+            const { data, duration } = await callApi(
+              `/api/media-attention?event_name=${v.event_name}&period_type=${v.period_type}`
+            )
+            return { data, duration }
+          }}
+        />
+
+        <TestCard
+          icon={<Network className="h-4 w-4" />}
+          title="get_actor_location_graph()"
+          description="Actor–location edges with weights from signals_actor_location_graph."
+          accent="bg-indigo-600"
+          fields={[
+            { key: 'event_name', label: 'event_name', placeholder: 'e.g. sudan_2023', defaultValue: 'sudan_2023' },
+            { key: 'min_edge_weight', label: 'min_edge_weight', type: 'number', placeholder: '1', defaultValue: '1' },
+          ]}
+          onRun={async v => {
+            const { data, duration } = await callApi(
+              `/api/actor-location-graph?event_name=${v.event_name}&min_edge_weight=${v.min_edge_weight}`
+            )
+            return { data, duration }
+          }}
+        />
+      </Section>
+
+      {/* ── Dashboard Summary Functions ────────────────────────────────── */}
+      <Section title="Dashboard Summary Functions" subtitle="Quick counts and recent event rows">
+        <TestCard
+          icon={<Hash className="h-4 w-4" />}
+          title="get_event_count()"
+          description="Total raw event count via COUNT(*) on the events table."
+          accent="bg-gray-700"
+          fields={[
+            { key: 'event_name', label: 'event_name', placeholder: 'e.g. sudan_2023', defaultValue: 'sudan_2023' },
+          ]}
+          onRun={async v => {
+            const { data, duration } = await callApi(`/api/event-count?event_name=${v.event_name}`)
+            return { data, duration }
+          }}
+        />
+
+        <TestCard
+          icon={<ClipboardList className="h-4 w-4" />}
+          title="get_recent_events()"
+          description="Most recent full event rows ordered by event_date descending."
+          accent="bg-gray-700"
+          fields={[
+            { key: 'event_name', label: 'event_name', placeholder: 'e.g. sudan_2023', defaultValue: 'sudan_2023' },
+            { key: 'limit', label: 'limit', type: 'number', placeholder: '20', defaultValue: '20' },
+          ]}
+          onRun={async v => {
+            const { data, duration } = await callApi(
+              `/api/recent-events?event_name=${v.event_name}&limit=${v.limit}`
+            )
+            return { data, duration }
+          }}
+        />
+      </Section>
+
+      {/* ── Saved Graph Functions ──────────────────────────────────────── */}
+      <Section title="Saved Graph Functions" subtitle="Create, retrieve, hide and delete saved graphs">
+        <TestCard
+          icon={<BookMarked className="h-4 w-4" />}
+          title="get_saved_graphs()"
+          description="Returns visible saved graphs. Toggle include_hidden to see all."
+          accent="bg-teal-600"
+          fields={[
+            { key: 'event_name', label: 'event_name', placeholder: 'e.g. sudan_2023', defaultValue: 'sudan_2023' },
+            {
+              key: 'include_hidden',
+              label: 'include_hidden',
+              type: 'select',
+              options: ['false', 'true'],
+              defaultValue: 'false',
+            },
+          ]}
+          onRun={async v => {
+            const { data, duration } = await callApi(
+              `/api/saved-graphs?event_name=${v.event_name}&include_hidden=${v.include_hidden}`
+            )
+            return { data, duration }
+          }}
+        />
+
+        <TestCard
+          icon={<BookMarked className="h-4 w-4" />}
+          title="save_graph()"
+          description="Save a new graph row. Returns the new row id."
+          accent="bg-teal-600"
+          fields={[
+            { key: 'event_name', label: 'event_name', placeholder: 'sudan_2023', defaultValue: 'sudan_2023' },
+            { key: 'query_text', label: 'query_text', placeholder: 'Show actor frequency', defaultValue: 'Show actor frequency' },
+            { key: 'intent_json', label: 'intent_json (JSON string)', placeholder: '{"type":"actor_frequency"}', defaultValue: '{"type":"actor_frequency"}' },
+            { key: 'label', label: 'label (optional)', placeholder: 'My graph' },
+          ]}
+          onRun={async v => {
+            const { data, duration } = await callApi('/api/save-graph', 'POST', {
+              event_name: v.event_name,
+              query_text: v.query_text,
+              intent_json: v.intent_json,
+              label: v.label || null,
+            })
+            return { data, duration }
+          }}
+        />
+
+        <TestCard
+          icon={<BookMarked className="h-4 w-4" />}
+          title="update_graph_visibility()"
+          description="Show or hide a saved graph by its id."
+          accent="bg-teal-600"
+          fields={[
+            { key: 'graph_id', label: 'graph_id', type: 'number', placeholder: '1', defaultValue: '1' },
+            { key: 'visible', label: 'visible', type: 'select', options: ['true', 'false'], defaultValue: 'true' },
+          ]}
+          onRun={async v => {
+            const { data, duration } = await callApi('/api/update-graph-visibility', 'POST', {
+              graph_id: Number(v.graph_id),
+              visible: v.visible === 'true',
+            })
+            return { data, duration }
+          }}
+        />
+
+        <TestCard
+          icon={<BookMarked className="h-4 w-4" />}
+          title="delete_graph()"
+          description="Delete a saved graph and its ratings by graph id."
+          accent="bg-red-600"
+          fields={[
+            { key: 'graph_id', label: 'graph_id', type: 'number', placeholder: '1', defaultValue: '1' },
+          ]}
+          onRun={async v => {
+            const { data, duration } = await callApi('/api/delete-graph', 'POST', {
+              graph_id: Number(v.graph_id),
+            })
+            return { data, duration }
+          }}
+        />
+      </Section>
+
+      {/* ── Rating Functions ───────────────────────────────────────────── */}
+      <Section title="Rating Functions" subtitle="Developer-facing thumbs up / down on saved graphs">
+        <TestCard
+          icon={<Star className="h-4 w-4" />}
+          title="rate_graph()"
+          description="Submit a rating of 1 (👍) or -1 (👎) for a saved graph."
+          accent="bg-yellow-500"
+          fields={[
+            { key: 'saved_graph_id', label: 'saved_graph_id', type: 'number', placeholder: '1', defaultValue: '1' },
+            { key: 'rating', label: 'rating', type: 'select', options: ['1', '-1'], defaultValue: '1' },
+          ]}
+          onRun={async v => {
+            const { data, duration } = await callApi('/api/rate-graph', 'POST', {
+              saved_graph_id: Number(v.saved_graph_id),
+              rating: Number(v.rating),
+            })
+            return { data, duration }
+          }}
+        />
+
+        <TestCard
+          icon={<Star className="h-4 w-4" />}
+          title="get_graph_ratings()"
+          description="Returns thumbs_up, thumbs_down, and total counts for a saved graph."
+          accent="bg-yellow-500"
+          fields={[
+            { key: 'saved_graph_id', label: 'saved_graph_id', type: 'number', placeholder: '1', defaultValue: '1' },
+          ]}
+          onRun={async v => {
+            const { data, duration } = await callApi(
+              `/api/graph-ratings?saved_graph_id=${v.saved_graph_id}`
+            )
+            return { data, duration }
+          }}
+        />
+      </Section>
+    </div>
+  )
+}
+
+// ─── Section wrapper ──────────────────────────────────────────────────────────
+
+function Section({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string
+  subtitle: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="card">
+      <div className="mb-4 border-b border-gray-200 pb-3">
+        <h2 className="text-base font-semibold text-gray-800">{title}</h2>
+        <p className="text-xs text-gray-400">{subtitle}</p>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">{children}</div>
+    </div>
+  )
 }
