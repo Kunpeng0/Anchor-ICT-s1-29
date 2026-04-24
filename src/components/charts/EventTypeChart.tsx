@@ -72,7 +72,7 @@ export default function EventTypeChart() {
                     showgrid: false,
                     zeroline: false,
                     tickfont: { size: 11, color: '#6b7280' },
-                    standoff: 20,
+                    ticklabelstandoff: 10,
                 },
                 showlegend: false,
                 hovermode: 'closest',
