@@ -41,30 +41,40 @@ export default function EventVolumeChart({ periodType }: EventVolumeChartProps) 
     const xValues = data.map((d) => d.period)
     const yValues = data.map((d) => d.event_count)
 
+    // function to ensure weekly labels readable
+    const formattedX = xValues.map((label) => {
+        if(periodType === 'weekly'){
+            const [year, week] = label.split('-W')
+            return `W${parseInt(week)} '${year.slice(2)}`
+        }
+        return label
+    })
+
     return (
         <Plot
         data={[
             {
-                x: xValues,
+                x: formattedX,
                 y: yValues,
                 type: 'scatter',            // scatter mode gives line chart
-                mode: 'lines+markers',      // drawing both line  and dots at each data point
+                mode: 'lines',              
                 name: 'Event Count',
                 line: {
                     color: '#4c6ef5',
-                    width: 2,
+                    width: 2.5,
+                    shape: 'spline',
+                    smoothing: 1.3,
                 },
-                marker: {
-                    color: '#4c6ef5',
-                    size: 5,
-                },
+                fill: 'tozeroy',
+                fillcolor: 'rgba(76, 110, 245, 0.08)',
+
                 hovertemplate: '%{x}<br>Events: %{y}<extra></extra>', // controls what appears in tooltip when hovering over a point
             },
         ]}
         // layout controls overall chart appearance
         layout={{
             autosize: true,
-            margin: { t: 10, r: 16, b: 48, l: 48},
+            margin: { t: 10, r: 32, b: 100, l: 48},
             paper_bgcolor: 'transparent',
             plot_bgcolor: 'transparent',
             font: {
@@ -74,25 +84,29 @@ export default function EventVolumeChart({ periodType }: EventVolumeChartProps) 
             },
 
             xaxis: {
-                type: 'category',
-                tickangle: -30,
+                tickangle: 0,
                 showgrid: false,
                 zeroline: false,
-                tickfont: { size: 11 },
+                tickfont: { size: 11, color: '#9ca3af' },
+                showline: false,
+                ticklabelstandoff: 10,
             },
 
             yaxis: {
+                rangemode: 'normal',
                 showgrid: true,
-                gridcolor: '#f3f4f6',
+                gridcolor: 'rgba(243, 244, 246, 0.8)',
                 zeroline: false,
-                tickfont: { size: 11 },
+                tickfont: { size: 11, color: '#9ca3af' },
                 title: {
                     text: 'Event Count',
                     font: { size: 11, color: '#9ca3af' },
+                    standoff: 20,
                 },
+                ticklabelstandoff: 10,
             },
-
             showlegend: false,
+            hovermode: 'x unified'
         }}
         // controls interactive behaviours and plotly toolbar
         config={{
