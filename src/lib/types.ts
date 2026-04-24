@@ -6,3 +6,10 @@ export interface EventVolumePoint {
 
 // types of period
 export type PeriodType = 'daily' | 'weekly'
+
+// data point returned by event type endpoint
+export interface EventTypePoint {
+    cameo_root: string
+    cameo_description: string
+    event_count: number
+}

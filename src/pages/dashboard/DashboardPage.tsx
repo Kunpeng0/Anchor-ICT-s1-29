@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Users, DollarSign, TrendingUp, ShoppingCart, TrendingDown } from 'lucide-react'
 import StatCard from '@/components/ui/StatCard'
 import EventVolumeChart from '@/components/charts/EventVolumeChart'
+import EventTypeChart from '@/components/charts/EventTypeChart'
 import { PeriodType } from '@/lib/types'
 
 const stats = [
@@ -51,8 +52,8 @@ export default function DashboardPage() {
 
           <div className="card">
             <h2 className="text-base font-semibold text-gray-900">Conflict Breakdown</h2>
-            <div className="mt-4 flex h-40 items-center justify-center rounded-lg bg-gray-50 text-sm text-gray-400">
-              [ Table goes here ]
+            <div className="mt-4 h-56">
+              <EventTypeChart />
             </div>
           </div>
         </div>
