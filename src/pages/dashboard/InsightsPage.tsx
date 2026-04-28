@@ -1,41 +1,76 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { ArrowUp, Bot, Sparkles, User2 } from 'lucide-react'
+import QueryResultChart from '@/components/charts/QueryResultChart'
 
 type MessageRole = 'assistant' | 'user'
+
+interface QueryIntent {
+  chart_type: string
+  signal:
+    | 'event_volume'
+    | 'event_type'
+    | 'actor_frequency'
+    | 'location_frequency'
+    | 'tone_over_time'
+    | 'media_attention'
+    | 'actor_location_graph'
+    | 'recent_events'
+  params: Record<string, unknown>
+}
+
+interface QueryResponse {
+  query: string
+  event_name: string
+  intent: QueryIntent
+  data: unknown
+}
 
 interface ChatMessage {
   id: number
   role: MessageRole
   content: string
+  result?: QueryResponse
 }
 
+const EVENT_NAME = 'sudan_2023'
+
 const starterPrompts = [
-  'Summarise the latest shift in conflict activity.',
-  'Which actors appear most active in the current data?',
-  'Show me where media attention is concentrated.',
-  'What event types are rising most quickly?',
+  'Show weekly conflict event volume.',
+  'Which actors were most active?',
+  'Which locations saw the most conflict events?',
+  'What event types are most common?',
+  'Show media attention over time.',
+  'Show average conflict tone over time.',
 ]
 
-function buildMockReply(prompt: string) {
-  const lowerPrompt = prompt.toLowerCase()
+async function submitQuery(promptText: string): Promise<QueryResponse> {
+  const response = await fetch('/query', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query: promptText,
+      event_name: EVENT_NAME,
+    }),
+  })
 
-  if (lowerPrompt.includes('actor')) {
-    return `Here is a clean actor-focused response layout for the analyst.\n\nI would highlight the most active actors first, then show how their activity changes over time and where they are concentrated geographically.`
+  if (!response.ok) {
+    let detail = `${response.status} ${response.statusText}`
+    try {
+      const errorBody = (await response.json()) as { detail?: string }
+      detail = errorBody.detail || detail
+    } catch {
+      const text = await response.text()
+      if (text) detail = text
+    }
+    throw new Error(detail)
   }
 
-  if (lowerPrompt.includes('where') || lowerPrompt.includes('location') || lowerPrompt.includes('map')) {
-    return `A location-first answer works well here.\n\nThe UI can surface a ranked list of hotspots, a supporting map, and a short explanation describing why those places stand out in the latest signal window.`
-  }
-
-  if (lowerPrompt.includes('type') || lowerPrompt.includes('breakdown')) {
-    return `This prompt maps well to an event-type breakdown.\n\nI would return a short written summary, then pair it with a bar chart that shows which event categories dominate the current period.`
-  }
-
-  return `This chat layout is ready for your backend integration.\n\nFor the demo, the assistant can respond with a short written interpretation first, then render the matching chart directly below the message thread.`
+  return response.json() as Promise<QueryResponse>
 }
 
 function MessageBubble({ message }: { message: ChatMessage }) {
   const isAssistant = message.role === 'assistant'
+  const hasChart = isAssistant && Boolean(message.result)
 
   return (
     <div className={`flex gap-4 ${isAssistant ? 'justify-start' : 'justify-end'}`}>
@@ -46,16 +81,18 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       )}
 
       <div
-        className={`max-w-3xl rounded-[28px] px-5 py-4 text-sm leading-7 shadow-sm ${
-          isAssistant
-            ? 'bg-white text-gray-700 ring-1 ring-gray-200'
-            : 'bg-gray-900 text-white'
-        }`}
+        className={`rounded-[28px] px-5 py-4 text-sm leading-7 shadow-sm ${
+          isAssistant ? 'bg-white text-gray-700 ring-1 ring-gray-200' : 'bg-gray-900 text-white'
+        } ${hasChart ? 'w-full max-w-5xl' : 'max-w-3xl'}`}
       >
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
           {isAssistant ? 'Anchor AI' : 'You'}
         </p>
-        <div className="whitespace-pre-wrap">{message.content}</div>
+        {message.content && <div className="whitespace-pre-wrap">{message.content}</div>}
+
+        {isAssistant && message.result && (
+          <QueryResultChart intent={message.result.intent} data={message.result.data} />
+        )}
       </div>
 
       {!isAssistant && (
@@ -93,22 +130,13 @@ export default function InsightsPage() {
   const [isThinking, setIsThinking] = useState(false)
   const nextIdRef = useRef(1)
   const scrollRef = useRef<HTMLDivElement | null>(null)
-  const timeoutRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (!scrollRef.current) return
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [messages, isThinking])
 
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        window.clearTimeout(timeoutRef.current)
-      }
-    }
-  }, [])
-
-  const submitPrompt = (promptText: string) => {
+  const submitPrompt = async (promptText: string) => {
     const trimmed = promptText.trim()
     if (!trimmed || isThinking) return
 
@@ -122,21 +150,33 @@ export default function InsightsPage() {
     setInput('')
     setIsThinking(true)
 
-    timeoutRef.current = window.setTimeout(() => {
+    try {
+      const result = await submitQuery(trimmed)
       const assistantMessage: ChatMessage = {
         id: nextIdRef.current++,
         role: 'assistant',
-        content: buildMockReply(trimmed),
+        content: '',
+        result,
       }
-
       setMessages((current) => [...current, assistantMessage])
+    } catch (error) {
+      const assistantMessage: ChatMessage = {
+        id: nextIdRef.current++,
+        role: 'assistant',
+        content:
+          error instanceof Error
+            ? `I could not generate a chart from the local model yet.\n\n${error.message}`
+            : 'I could not generate a chart from the local model yet.',
+      }
+      setMessages((current) => [...current, assistantMessage])
+    } finally {
       setIsThinking(false)
-    }, 900)
+    }
   }
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    submitPrompt(input)
+    void submitPrompt(input)
   }
 
   return (
@@ -151,7 +191,7 @@ export default function InsightsPage() {
 
           <div className="flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-medium text-gray-600 shadow-sm ring-1 ring-gray-200">
             <Sparkles className="h-4 w-4 text-brand-500" />
-            Chat-style exploration interface
+            Local model chart generation
           </div>
         </div>
       </div>
@@ -164,10 +204,10 @@ export default function InsightsPage() {
             </div>
 
             <h2 className="mt-8 text-4xl font-semibold tracking-tight text-gray-900">
-              Start a conversation with Anchor AI
+              Ask Anchor AI for a chart
             </h2>
             <p className="mt-4 max-w-2xl text-base leading-8 text-gray-500">
-              Ask about conflict activity, actor participation, geographic hotspots, or media attention.
+              Choose a common question or ask about conflict activity, actors, locations, event types, tone, or media attention.
             </p>
 
             <div className="mt-10 grid w-full gap-3 text-left sm:grid-cols-2">
@@ -175,7 +215,7 @@ export default function InsightsPage() {
                 <button
                   key={prompt}
                   type="button"
-                  onClick={() => submitPrompt(prompt)}
+                  onClick={() => void submitPrompt(prompt)}
                   className="rounded-[24px] bg-white/90 px-5 py-4 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md"
                 >
                   {prompt}
@@ -184,7 +224,7 @@ export default function InsightsPage() {
             </div>
           </div>
         ) : (
-          <div className="mx-auto max-w-4xl space-y-6">
+          <div className="mx-auto max-w-6xl space-y-6">
             {messages.map((message) => (
               <MessageBubble key={message.id} message={message} />
             ))}
@@ -195,13 +235,16 @@ export default function InsightsPage() {
 
       <div className="border-t border-white/70 bg-white/80 px-6 py-5 backdrop-blur-xl sm:px-8">
         <div className="mx-auto max-w-4xl">
-          <form onSubmit={handleSubmit} className="rounded-[30px] bg-white p-3 shadow-[0_18px_35px_rgba(15,23,42,0.07)] ring-1 ring-gray-200">
+          <form
+            onSubmit={handleSubmit}
+            className="rounded-[30px] bg-white p-3 shadow-[0_18px_35px_rgba(15,23,42,0.07)] ring-1 ring-gray-200"
+          >
             <div className="flex items-end gap-3">
               <textarea
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 rows={1}
-                placeholder="Message Anchor AI..."
+                placeholder="Ask for a chart..."
                 className="max-h-40 min-h-[52px] flex-1 resize-none border-0 bg-transparent px-3 py-3 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-0"
               />
 
@@ -209,12 +252,12 @@ export default function InsightsPage() {
                 type="submit"
                 disabled={!input.trim() || isThinking}
                 className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-900 text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-gray-300"
+                aria-label="Send query"
               >
                 <ArrowUp className="h-5 w-5" />
               </button>
             </div>
           </form>
-
         </div>
       </div>
     </div>
