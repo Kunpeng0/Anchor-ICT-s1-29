@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Plot from 'react-plotly.js'
 import {
   Activity,
   Users,
@@ -17,6 +18,7 @@ import {
   XCircle,
   Terminal,
 } from 'lucide-react'
+import { EventTypePoint, EventVolumePoint, PeriodType } from '@/lib/types'
 
 // Types
 
@@ -27,6 +29,71 @@ interface TestResult {
   data?: unknown
   error?: string
   duration?: number
+  chartType?: 'event_volume' | 'event_type'
+  periodType?: PeriodType
+}
+
+// Inline Charts
+
+function EventVolumeChartInline({ data, periodType }: { data: EventVolumePoint[]; periodType: PeriodType }) {
+  const xValues = data.map((d) => d.period)
+  const yValues = data.map((d) => d.event_count)
+  const formattedX = xValues.map((label) => {
+    if (periodType === 'weekly') {
+      const [year, week] = label.split('-W')
+      return `W${parseInt(week)} '${year.slice(2)}`
+    }
+    return label
+  })
+  return (
+    <Plot
+      data={[{
+        x: formattedX, y: yValues, type: 'scatter', mode: 'lines', name: 'Event Count',
+        line: { color: '#4c6ef5', width: 2.5, shape: 'spline', smoothing: 1.3 },
+        fill: 'tozeroy', fillcolor: 'rgba(76, 110, 245, 0.08)',
+        hovertemplate: '%{x}<br>Events: %{y}<extra></extra>',
+      }]}
+      layout={{
+        autosize: true, margin: { t: 10, r: 32, b: 80, l: 48 },
+        paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+        font: { family: 'Inter, system-ui, sans-serif', size: 12, color: '#6b7280' },
+        xaxis: { showgrid: false, zeroline: false, tickfont: { size: 11, color: '#9ca3af' }, showline: false, ticklabelstandoff: 10 },
+        yaxis: { showgrid: true, gridcolor: 'rgba(243,244,246,0.8)', zeroline: false, tickfont: { size: 11, color: '#9ca3af' }, title: { text: 'Event Count', font: { size: 11, color: '#9ca3af' }, standoff: 20 } },
+        showlegend: false, hovermode: 'x unified',
+      }}
+      config={{ responsive: true, displayModeBar: false }}
+      useResizeHandler
+      style={{ width: '100%', height: '240px' }}
+    />
+  )
+}
+
+function EventTypeChartInline({ data }: { data: EventTypePoint[] }) {
+  const sorted = [...data].sort((a, b) => a.event_count - b.event_count)
+  const labels = sorted.map((d) => `${d.cameo_root} - ${d.cameo_description}`)
+  const values = sorted.map((d) => d.event_count)
+  return (
+    <Plot
+      data={[{
+        x: values, y: labels, type: 'bar', orientation: 'h', name: 'Events',
+        marker: { color: values.map((_, i) => `rgba(76, 110, 245, ${0.4 + (i / (values.length - 1)) * 0.6})`) },
+        hovertemplate: '<b>%{y}</b><br>Events: <b>%{x}</b><extra></extra>',
+        text: values.map(String), textposition: 'outside', textfont: { size: 11, color: '#6b7280' },
+      }]}
+      layout={{
+        autosize: true, margin: { t: 10, r: 24, b: 40, l: 160 },
+        paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+        font: { family: 'Inter, system-ui, sans-serif', size: 12, color: '#6b7280' },
+        bargap: 0.4,
+        xaxis: { showgrid: true, gridcolor: 'rgba(243,244,246,0.8)', zeroline: false, tickfont: { size: 11, color: '#9ca3af' }, showline: false, range: [0, Math.max(...values) * 1.15] },
+        yaxis: { showgrid: false, zeroline: false, tickfont: { size: 11, color: '#6b7280' }, ticklabelstandoff: 10 },
+        showlegend: false, hovermode: 'closest',
+      }}
+      config={{ responsive: true, displayModeBar: false }}
+      useResizeHandler
+      style={{ width: '100%', height: '240px' }}
+    />
+  )
 }
 
 // Config 
@@ -83,9 +150,7 @@ function ResultPanel({ result }: { result: TestResult }) {
   if (result.status === 'idle' || result.status === 'loading') return null
 
   const isError = result.status === 'error'
-  const content = isError
-    ? result.error
-    : JSON.stringify(result.data, null, 2)
+  const showChart = !isError && result.chartType && Array.isArray(result.data)
 
   return (
     <div
@@ -101,7 +166,7 @@ function ResultPanel({ result }: { result: TestResult }) {
       >
         <span className="flex items-center gap-1.5 font-sans text-xs font-medium text-gray-500">
           <Terminal className="h-3.5 w-3.5" />
-          {isError ? 'Error' : `Response`}
+          {isError ? 'Error' : showChart ? 'Chart' : 'Response'}
           {result.duration != null && !isError && (
             <span className="ml-1 rounded bg-gray-200 px-1.5 py-0.5 text-gray-500">
               {result.duration}ms
@@ -115,9 +180,24 @@ function ResultPanel({ result }: { result: TestResult }) {
         )}
       </button>
       {open && (
-        <pre className="max-h-64 overflow-auto border-t border-gray-200 px-3 py-2 text-xs leading-relaxed">
-          {content}
-        </pre>
+        <div className="border-t border-gray-200">
+          {isError ? (
+            <pre className="max-h-64 overflow-auto px-3 py-2 text-xs leading-relaxed">{result.error}</pre>
+          ) : showChart ? (
+            <div className="bg-white px-2 py-2 rounded-b-lg">
+              {result.chartType === 'event_volume' && (
+                <EventVolumeChartInline data={result.data as EventVolumePoint[]} periodType={result.periodType ?? 'daily'} />
+              )}
+              {result.chartType === 'event_type' && (
+                <EventTypeChartInline data={result.data as EventTypePoint[]} />
+              )}
+            </div>
+          ) : (
+            <pre className="max-h-64 overflow-auto px-3 py-2 text-xs leading-relaxed">
+              {JSON.stringify(result.data, null, 2)}
+            </pre>
+          )}
+        </div>
       )}
     </div>
   )
@@ -153,8 +233,13 @@ function TestCard({ icon, title, description, fields, onRun, accent = 'bg-brand-
   const handleRun = async () => {
     setResult({ status: 'loading' })
     try {
-      const data = await onRun(values)
-      setResult({ status: 'success', data, duration: (data as { duration?: number }).duration })
+      const res = await onRun(values)
+      const { data, duration, chartType, periodType } = res as {
+        data: unknown; duration: number
+        chartType?: TestResult['chartType']
+        periodType?: PeriodType
+      }
+      setResult({ status: 'success', data, duration, chartType, periodType })
     } catch (e) {
       setResult({ status: 'error', error: (e as Error).message })
     }
@@ -255,7 +340,7 @@ export default function BackendTestPage() {
             const { data, duration } = await callApi(
               `/signals/${v.event_name}/event-volume?period_type=${v.period_type}`
             )
-            return { data, duration }
+            return { data, duration, chartType: 'event_volume' as const, periodType: v.period_type as PeriodType }
           }}
         />
 
@@ -269,7 +354,7 @@ export default function BackendTestPage() {
           ]}
           onRun={async v => {
             const { data, duration } = await callApi(`/signals/${v.event_name}/event-type`)
-            return { data, duration }
+            return { data, duration, chartType: 'event_type' as const }
           }}
         />
 
