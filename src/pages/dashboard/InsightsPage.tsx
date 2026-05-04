@@ -128,8 +128,10 @@ export default function InsightsPage() {
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isThinking, setIsThinking] = useState(false)
+  const [selectedStarterPrompt, setSelectedStarterPrompt] = useState('')
   const nextIdRef = useRef(1)
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  const inputRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
     if (!scrollRef.current) return
@@ -177,6 +179,12 @@ export default function InsightsPage() {
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     void submitPrompt(input)
+  }
+
+  const handleStarterPromptChange = (promptText: string) => {
+    setSelectedStarterPrompt(promptText)
+    setInput(promptText)
+    inputRef.current?.focus()
   }
 
   return (
@@ -235,12 +243,42 @@ export default function InsightsPage() {
 
       <div className="border-t border-white/70 bg-white/80 px-6 py-5 backdrop-blur-xl sm:px-8">
         <div className="mx-auto max-w-4xl">
+          {messages.length > 0 && (
+            <div className="mb-4 rounded-[24px] bg-white/90 px-4 py-4 shadow-sm ring-1 ring-gray-200">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-600">
+                    Next question
+                  </p>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Pick one of the frequentlty asked question.
+                  </p>
+                </div>
+
+                <select
+                  value={selectedStarterPrompt}
+                  onChange={(event) => handleStarterPromptChange(event.target.value)}
+                  disabled={isThinking}
+                  className="min-w-[260px] rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:bg-gray-100"
+                >
+                  <option value="">Choose a question</option>
+                  {starterPrompts.map((prompt) => (
+                    <option key={prompt} value={prompt}>
+                      {prompt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
           <form
             onSubmit={handleSubmit}
             className="rounded-[30px] bg-white p-3 shadow-[0_18px_35px_rgba(15,23,42,0.07)] ring-1 ring-gray-200"
           >
             <div className="flex items-end gap-3">
               <textarea
+                ref={inputRef}
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 rows={1}
