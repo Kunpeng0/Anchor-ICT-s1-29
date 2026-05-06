@@ -89,7 +89,6 @@ export default function EventVolumeChart({ periodType }: EventVolumeChartProps) 
                 zeroline: false,
                 tickfont: { size: 11, color: '#9ca3af' },
                 showline: false,
-                ticklabelstandoff: 10,
             },
 
             yaxis: {
@@ -103,7 +102,6 @@ export default function EventVolumeChart({ periodType }: EventVolumeChartProps) 
                     font: { size: 11, color: '#9ca3af' },
                     standoff: 20,
                 },
-                ticklabelstandoff: 10,
             },
             showlegend: false,
             hovermode: 'x unified'
