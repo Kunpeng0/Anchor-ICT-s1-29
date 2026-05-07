@@ -196,11 +196,6 @@ export default function InsightsPage() {
               Anchor Analyst Workspace
             </p>
           </div>
-
-          <div className="flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-medium text-gray-600 shadow-sm ring-1 ring-gray-200">
-            <Sparkles className="h-4 w-4 text-brand-500" />
-            Local model chart generation
-          </div>
         </div>
       </div>
 
