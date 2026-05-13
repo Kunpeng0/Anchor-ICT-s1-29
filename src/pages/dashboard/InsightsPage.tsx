@@ -55,13 +55,17 @@ async function submitQuery(promptText: string): Promise<QueryResponse> {
 
   if (!response.ok) {
     let detail = `${response.status} ${response.statusText}`
-    try {
-      const errorBody = (await response.json()) as { detail?: string }
-      detail = errorBody.detail || detail
-    } catch {
-      const text = await response.text()
-      if (text) detail = text
+    const text = await response.text()
+
+    if (text) {
+      try {
+        const errorBody = JSON.parse(text) as { detail?: string }
+        detail = errorBody.detail || text
+      } catch {
+        detail = text
+      }
     }
+
     throw new Error(detail)
   }
 
