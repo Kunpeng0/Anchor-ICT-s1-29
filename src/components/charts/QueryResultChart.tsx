@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Download } from 'lucide-react'
 import Plot from 'react-plotly.js'
 
@@ -47,6 +47,59 @@ function asRecords(data: unknown): Record<string, unknown>[] {
           Boolean(row) && typeof row === 'object' && !Array.isArray(row),
       )
     : []
+}
+
+function isLineSignal(signal: SignalName) {
+  return signal === 'event_volume' || signal === 'tone_over_time' || signal === 'media_attention'
+}
+
+function isBarSignal(signal: SignalName) {
+  return (
+    signal === 'actor_frequency' ||
+    signal === 'location_frequency' ||
+    signal === 'event_type'
+  )
+}
+
+function prepareRowsForSignal(signal: SignalName, rows: Record<string, unknown>[]) {
+  if (isLineSignal(signal)) {
+    return rows.slice(-52)
+  }
+
+  if (isBarSignal(signal)) {
+    return [...rows]
+      .sort((a, b) => Number(a.event_count ?? 0) - Number(b.event_count ?? 0))
+      .slice(-12)
+  }
+
+  return rows
+}
+
+function useProgressiveRows(rows: Record<string, unknown>[]) {
+  const [visibleCount, setVisibleCount] = useState(0)
+
+  useEffect(() => {
+    setVisibleCount(0)
+    if (rows.length === 0) return
+
+    const chunkSize = Math.max(1, Math.ceil(rows.length / 36))
+    const intervalId = window.setInterval(() => {
+      setVisibleCount((current) => {
+        const next = Math.min(rows.length, current + chunkSize)
+        if (next >= rows.length) {
+          window.clearInterval(intervalId)
+        }
+        return next
+      })
+    }, 80)
+
+    return () => window.clearInterval(intervalId)
+  }, [rows])
+
+  return {
+    rows: rows.slice(0, visibleCount),
+    isStreaming: visibleCount < rows.length,
+  }
 }
 
 function formatValue(value: unknown) {
@@ -139,6 +192,17 @@ function EmptyState() {
   )
 }
 
+function StreamingPlaceholder() {
+  return (
+    <div className="flex h-[360px] flex-col justify-end gap-3 rounded-lg bg-white/60 px-6 py-8">
+      <div className="h-4 w-2/3 animate-pulse rounded-full bg-brand-100" />
+      <div className="h-4 w-5/6 animate-pulse rounded-full bg-brand-100 [animation-delay:120ms]" />
+      <div className="h-4 w-1/2 animate-pulse rounded-full bg-brand-100 [animation-delay:240ms]" />
+      <div className="h-4 w-3/4 animate-pulse rounded-full bg-brand-100 [animation-delay:360ms]" />
+    </div>
+  )
+}
+
 function ResultTable({ rows, fileName }: { rows: Record<string, unknown>[]; fileName: string }) {
   if (rows.length === 0) return <EmptyState />
 
@@ -193,9 +257,7 @@ function LineChart({
 
   if (rows.length === 0) return <EmptyState />
 
-  // Dense time-series data becomes unreadable in a chat panel, so show the latest year of weekly points.
-  const visibleRows = rows.slice(-52)
-  const showMarkers = visibleRows.length <= 26
+  const showMarkers = rows.length <= 26
   const downloadChart = () => {
     downloadPlotSvg(plotRef.current, fileName)
   }
@@ -206,8 +268,8 @@ function LineChart({
         <Plot
           data={[
             {
-              x: visibleRows.map((row) => formatPeriodLabel(row.period)),
-              y: visibleRows.map((row) => Number(row[yKey] ?? 0)),
+              x: rows.map((row) => formatPeriodLabel(row.period)),
+              y: rows.map((row) => Number(row[yKey] ?? 0)),
               type: 'scatter',
               mode: showMarkers ? 'lines+markers' : 'lines',
               line: { color: '#4c6ef5', width: 2.5 },
@@ -275,11 +337,7 @@ function BarChart({
 
   if (rows.length === 0) return <EmptyState />
 
-  // Keep the chart focused on the largest categories; smaller items are still available from raw endpoints.
-  const sorted = [...rows]
-    .sort((a, b) => Number(a[valueKey] ?? 0) - Number(b[valueKey] ?? 0))
-    .slice(-12)
-  const fullLabels = sorted.map((row) => formatValue(row[labelKey]))
+  const fullLabels = rows.map((row) => formatValue(row[labelKey]))
   const downloadChart = () => {
     downloadPlotSvg(plotRef.current, fileName)
   }
@@ -290,12 +348,12 @@ function BarChart({
         <Plot
           data={[
             {
-              x: sorted.map((row) => Number(row[valueKey] ?? 0)),
+              x: rows.map((row) => Number(row[valueKey] ?? 0)),
               y: fullLabels.map((label) => shortLabel(label)),
               type: 'bar',
               orientation: 'h',
               marker: { color: '#4c6ef5' },
-              text: sorted.map((row) => formatValue(row[valueKey])),
+              text: rows.map((row) => formatValue(row[valueKey])),
               textposition: 'outside',
               customdata: fullLabels,
               hovertemplate: '<b>%{customdata}</b><br>Count: %{x}<extra></extra>',
@@ -352,28 +410,35 @@ function EventTypeChart({ rows, fileName }: { rows: Record<string, unknown>[]; f
 }
 
 export default function QueryResultChart({ intent, data }: QueryResultChartProps) {
-  const rows = asRecords(data)
+  const rows = useMemo(() => (isGraphData(data) ? data.edges : asRecords(data)), [data])
+  const preparedRows = useMemo(
+    () => prepareRowsForSignal(intent.signal, rows),
+    [intent.signal, rows],
+  )
+  const { rows: streamedRows, isStreaming } = useProgressiveRows(preparedRows)
   const svgFileName = filenameFor(intent.signal, 'svg')
   const jsonFileName = filenameFor(intent.signal, 'json')
 
   // The LLM chooses a signal; this component chooses the safest visual form for that signal's data shape.
   let content
-  if (intent.signal === 'event_volume') {
-    content = <LineChart rows={rows} yKey="event_count" yLabel="Events" fileName={svgFileName} />
+  if (isStreaming && streamedRows.length === 0) {
+    content = <StreamingPlaceholder />
+  } else if (intent.signal === 'event_volume') {
+    content = <LineChart rows={streamedRows} yKey="event_count" yLabel="Events" fileName={svgFileName} />
   } else if (intent.signal === 'tone_over_time') {
-    content = <LineChart rows={rows} yKey="avg_goldstein" yLabel="Avg Goldstein" fileName={svgFileName} />
+    content = <LineChart rows={streamedRows} yKey="avg_goldstein" yLabel="Avg Goldstein" fileName={svgFileName} />
   } else if (intent.signal === 'media_attention') {
-    content = <LineChart rows={rows} yKey="total_mentions" yLabel="Mentions" fileName={svgFileName} />
+    content = <LineChart rows={streamedRows} yKey="total_mentions" yLabel="Mentions" fileName={svgFileName} />
   } else if (intent.signal === 'actor_frequency') {
-    content = <BarChart rows={rows} labelKey="actor" valueKey="event_count" fileName={svgFileName} />
+    content = <BarChart rows={streamedRows} labelKey="actor" valueKey="event_count" fileName={svgFileName} />
   } else if (intent.signal === 'location_frequency') {
-    content = <BarChart rows={rows} labelKey="location" valueKey="event_count" fileName={svgFileName} />
+    content = <BarChart rows={streamedRows} labelKey="location" valueKey="event_count" fileName={svgFileName} />
   } else if (intent.signal === 'event_type') {
-    content = <EventTypeChart rows={rows} fileName={svgFileName} />
+    content = <EventTypeChart rows={streamedRows} fileName={svgFileName} />
   } else if (intent.signal === 'actor_location_graph' && isGraphData(data)) {
-    content = <ResultTable rows={data.edges} fileName={jsonFileName} />
+    content = <ResultTable rows={streamedRows} fileName={jsonFileName} />
   } else {
-    content = <ResultTable rows={rows} fileName={jsonFileName} />
+    content = <ResultTable rows={streamedRows} fileName={jsonFileName} />
   }
 
   return (
@@ -382,6 +447,11 @@ export default function QueryResultChart({ intent, data }: QueryResultChartProps
         <div>
           <h3 className="text-base font-semibold text-gray-900">{signalTitles[intent.signal]}</h3>
         </div>
+        {isStreaming && (
+          <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-600">
+            Streaming chart...
+          </span>
+        )}
       </div>
       {content}
     </div>
