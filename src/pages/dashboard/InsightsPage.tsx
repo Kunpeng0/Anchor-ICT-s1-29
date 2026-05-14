@@ -55,13 +55,17 @@ async function submitQuery(promptText: string): Promise<QueryResponse> {
 
   if (!response.ok) {
     let detail = `${response.status} ${response.statusText}`
-    try {
-      const errorBody = (await response.json()) as { detail?: string }
-      detail = errorBody.detail || detail
-    } catch {
-      const text = await response.text()
-      if (text) detail = text
+    const text = await response.text()
+
+    if (text) {
+      try {
+        const errorBody = JSON.parse(text) as { detail?: string }
+        detail = errorBody.detail || text
+      } catch {
+        detail = text
+      }
     }
+
     throw new Error(detail)
   }
 
@@ -195,11 +199,6 @@ export default function InsightsPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-brand-600">
               Anchor Analyst Workspace
             </p>
-          </div>
-
-          <div className="flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-medium text-gray-600 shadow-sm ring-1 ring-gray-200">
-            <Sparkles className="h-4 w-4 text-brand-500" />
-            Local model chart generation
           </div>
         </div>
       </div>

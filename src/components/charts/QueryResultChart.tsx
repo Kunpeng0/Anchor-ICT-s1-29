@@ -1,3 +1,5 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Download } from 'lucide-react'
 import Plot from 'react-plotly.js'
 
 type SignalName =
@@ -21,6 +23,11 @@ interface QueryResultChartProps {
   data: unknown
 }
 
+interface DownloadButtonProps {
+  label: string
+  onClick: () => void
+}
+
 const signalTitles: Record<SignalName, string> = {
   event_volume: 'Event Volume',
   event_type: 'Event Types',
@@ -42,9 +49,113 @@ function asRecords(data: unknown): Record<string, unknown>[] {
     : []
 }
 
+function isLineSignal(signal: SignalName) {
+  return signal === 'event_volume' || signal === 'tone_over_time' || signal === 'media_attention'
+}
+
+function isBarSignal(signal: SignalName) {
+  return (
+    signal === 'actor_frequency' ||
+    signal === 'location_frequency' ||
+    signal === 'event_type'
+  )
+}
+
+function prepareRowsForSignal(signal: SignalName, rows: Record<string, unknown>[]) {
+  if (isLineSignal(signal)) {
+    return rows.slice(-52)
+  }
+
+  if (isBarSignal(signal)) {
+    return [...rows]
+      .sort((a, b) => Number(a.event_count ?? 0) - Number(b.event_count ?? 0))
+      .slice(-12)
+  }
+
+  return rows
+}
+
+function useProgressiveRows(rows: Record<string, unknown>[]) {
+  const [visibleCount, setVisibleCount] = useState(0)
+
+  useEffect(() => {
+    setVisibleCount(0)
+    if (rows.length === 0) return
+
+    const chunkSize = Math.max(1, Math.ceil(rows.length / 36))
+    const intervalId = window.setInterval(() => {
+      setVisibleCount((current) => {
+        const next = Math.min(rows.length, current + chunkSize)
+        if (next >= rows.length) {
+          window.clearInterval(intervalId)
+        }
+        return next
+      })
+    }, 80)
+
+    return () => window.clearInterval(intervalId)
+  }, [rows])
+
+  return {
+    rows: rows.slice(0, visibleCount),
+    isStreaming: visibleCount < rows.length,
+  }
+}
+
 function formatValue(value: unknown) {
   if (value === null || value === undefined || value === '') return '-'
   return String(value)
+}
+
+function filenameFor(signal: SignalName, extension: string) {
+  const timestamp = new Date().toISOString().slice(0, 10)
+  return `anchor-${signal}-${timestamp}.${extension}`
+}
+
+function DownloadButton({ label, onClick }: DownloadButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 shadow-sm transition hover:bg-gray-50 hover:text-gray-900"
+      title={label}
+    >
+      <Download className="h-3.5 w-3.5" />
+      {label}
+    </button>
+  )
+}
+
+function downloadJson(filename: string, value: unknown) {
+  const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+function downloadPlotSvg(graphElement: HTMLElement | null, filename: string) {
+  const svg = graphElement?.querySelector('svg.main-svg')
+  if (!(svg instanceof SVGSVGElement)) return
+
+  const clonedSvg = svg.cloneNode(true) as SVGSVGElement
+  clonedSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+
+  const blob = new Blob([new XMLSerializer().serializeToString(clonedSvg)], {
+    type: 'image/svg+xml;charset=utf-8',
+  })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
 }
 
 // Long actor/location names are shortened on the axis, while full labels remain available in hover text.
@@ -81,37 +192,53 @@ function EmptyState() {
   )
 }
 
-function ResultTable({ rows }: { rows: Record<string, unknown>[] }) {
+function StreamingPlaceholder() {
+  return (
+    <div className="flex h-[360px] flex-col justify-end gap-3 rounded-lg bg-white/60 px-6 py-8">
+      <div className="h-4 w-2/3 animate-pulse rounded-full bg-brand-100" />
+      <div className="h-4 w-5/6 animate-pulse rounded-full bg-brand-100 [animation-delay:120ms]" />
+      <div className="h-4 w-1/2 animate-pulse rounded-full bg-brand-100 [animation-delay:240ms]" />
+      <div className="h-4 w-3/4 animate-pulse rounded-full bg-brand-100 [animation-delay:360ms]" />
+    </div>
+  )
+}
+
+function ResultTable({ rows, fileName }: { rows: Record<string, unknown>[]; fileName: string }) {
   if (rows.length === 0) return <EmptyState />
 
   // Limit visible columns and rows so raw event tables do not overwhelm the chat message.
   const columns = Object.keys(rows[0]).slice(0, 8)
 
   return (
-    <div className="max-h-72 overflow-auto rounded-lg border border-gray-200">
-      <table className="min-w-full divide-y divide-gray-200 text-left text-xs">
-        <thead className="sticky top-0 bg-gray-50 text-gray-500">
-          <tr>
-            {columns.map((column) => (
-              <th key={column} className="px-3 py-2 font-semibold">
-                {column}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100 bg-white text-gray-700">
-          {rows.slice(0, 20).map((row, index) => (
-            <tr key={index}>
+    <>
+      <div className="max-h-72 overflow-auto rounded-lg border border-gray-200">
+        <table className="min-w-full divide-y divide-gray-200 text-left text-xs">
+          <thead className="sticky top-0 bg-gray-50 text-gray-500">
+            <tr>
               {columns.map((column) => (
-                <td key={column} className="max-w-[220px] truncate px-3 py-2">
-                  {formatValue(row[column])}
-                </td>
+                <th key={column} className="px-3 py-2 font-semibold">
+                  {column}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody className="divide-y divide-gray-100 bg-white text-gray-700">
+            {rows.slice(0, 20).map((row, index) => (
+              <tr key={index}>
+                {columns.map((column) => (
+                  <td key={column} className="max-w-[220px] truncate px-3 py-2">
+                    {formatValue(row[column])}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-3 flex justify-end">
+        <DownloadButton label="Download JSON" onClick={() => downloadJson(fileName, rows)} />
+      </div>
+    </>
   )
 }
 
@@ -119,63 +246,79 @@ function LineChart({
   rows,
   yKey,
   yLabel,
+  fileName,
 }: {
   rows: Record<string, unknown>[]
   yKey: string
   yLabel: string
+  fileName: string
 }) {
+  const plotRef = useRef<HTMLElement | null>(null)
+
   if (rows.length === 0) return <EmptyState />
 
-  // Dense time-series data becomes unreadable in a chat panel, so show the latest year of weekly points.
-  const visibleRows = rows.slice(-52)
-  const showMarkers = visibleRows.length <= 26
+  const showMarkers = rows.length <= 26
+  const downloadChart = () => {
+    downloadPlotSvg(plotRef.current, fileName)
+  }
 
   return (
-    <div className="h-[360px]">
-      <Plot
-        data={[
-          {
-            x: visibleRows.map((row) => formatPeriodLabel(row.period)),
-            y: visibleRows.map((row) => Number(row[yKey] ?? 0)),
-            type: 'scatter',
-            mode: showMarkers ? 'lines+markers' : 'lines',
-            line: { color: '#4c6ef5', width: 2.5 },
-            marker: { color: '#4c6ef5', size: 5 },
-            fill: 'tozeroy',
-            fillcolor: 'rgba(76, 110, 245, 0.08)',
-            hovertemplate: `%{x}<br>${yLabel}: %{y}<extra></extra>`,
-          },
-        ]}
-        layout={{
-          autosize: true,
-          margin: { t: 12, r: 24, b: 56, l: 72 },
-          paper_bgcolor: 'transparent',
-          plot_bgcolor: 'transparent',
-          font: { family: 'Inter, system-ui, sans-serif', size: 12, color: '#6b7280' },
-          xaxis: {
-            automargin: true,
-            nticks: 7,
-            showgrid: false,
-            tickangle: 0,
-            tickfont: { size: 11, color: '#9ca3af' },
-            zeroline: false,
-          },
-          yaxis: {
-            automargin: true,
-            showgrid: true,
-            gridcolor: 'rgba(243, 244, 246, 0.9)',
-            zeroline: false,
-            tickfont: { size: 11, color: '#9ca3af' },
-            title: { text: yLabel, font: { size: 11, color: '#9ca3af' } },
-          },
-          showlegend: false,
-          hovermode: 'x unified',
-        }}
-        config={{ responsive: true, displayModeBar: false }}
-        useResizeHandler
-        style={{ width: '100%', height: '100%' }}
-      />
-    </div>
+    <>
+      <div className="h-[360px]">
+        <Plot
+          data={[
+            {
+              x: rows.map((row) => formatPeriodLabel(row.period)),
+              y: rows.map((row) => Number(row[yKey] ?? 0)),
+              type: 'scatter',
+              mode: showMarkers ? 'lines+markers' : 'lines',
+              line: { color: '#4c6ef5', width: 2.5 },
+              marker: { color: '#4c6ef5', size: 5 },
+              fill: 'tozeroy',
+              fillcolor: 'rgba(76, 110, 245, 0.08)',
+              hovertemplate: `%{x}<br>${yLabel}: %{y}<extra></extra>`,
+            },
+          ]}
+          layout={{
+            autosize: true,
+            margin: { t: 12, r: 24, b: 56, l: 72 },
+            paper_bgcolor: 'transparent',
+            plot_bgcolor: 'transparent',
+            font: { family: 'Inter, system-ui, sans-serif', size: 12, color: '#6b7280' },
+            xaxis: {
+              automargin: true,
+              nticks: 7,
+              showgrid: false,
+              tickangle: 0,
+              tickfont: { size: 11, color: '#9ca3af' },
+              zeroline: false,
+            },
+            yaxis: {
+              automargin: true,
+              showgrid: true,
+              gridcolor: 'rgba(243, 244, 246, 0.9)',
+              zeroline: false,
+              tickfont: { size: 11, color: '#9ca3af' },
+              title: { text: yLabel, font: { size: 11, color: '#9ca3af' } },
+            },
+            showlegend: false,
+            hovermode: 'x unified',
+          }}
+          config={{ responsive: true, displayModeBar: false }}
+          onInitialized={(_, graphDiv) => {
+            plotRef.current = graphDiv
+          }}
+          onUpdate={(_, graphDiv) => {
+            plotRef.current = graphDiv
+          }}
+          useResizeHandler
+          style={{ width: '100%', height: '100%' }}
+        />
+      </div>
+      <div className="mt-3 flex justify-end">
+        <DownloadButton label="Download SVG" onClick={downloadChart} />
+      </div>
+    </>
   )
 }
 
@@ -183,64 +326,78 @@ function BarChart({
   rows,
   labelKey,
   valueKey,
+  fileName,
 }: {
   rows: Record<string, unknown>[]
   labelKey: string
   valueKey: string
+  fileName: string
 }) {
+  const plotRef = useRef<HTMLElement | null>(null)
+
   if (rows.length === 0) return <EmptyState />
 
-  // Keep the chart focused on the largest categories; smaller items are still available from raw endpoints.
-  const sorted = [...rows]
-    .sort((a, b) => Number(a[valueKey] ?? 0) - Number(b[valueKey] ?? 0))
-    .slice(-12)
-  const fullLabels = sorted.map((row) => formatValue(row[labelKey]))
+  const fullLabels = rows.map((row) => formatValue(row[labelKey]))
+  const downloadChart = () => {
+    downloadPlotSvg(plotRef.current, fileName)
+  }
 
   return (
-    <div className="h-[360px]">
-      <Plot
-        data={[
-          {
-            x: sorted.map((row) => Number(row[valueKey] ?? 0)),
-            y: fullLabels.map((label) => shortLabel(label)),
-            type: 'bar',
-            orientation: 'h',
-            marker: { color: '#4c6ef5' },
-            text: sorted.map((row) => formatValue(row[valueKey])),
-            textposition: 'outside',
-            customdata: fullLabels,
-            hovertemplate: '<b>%{customdata}</b><br>Count: %{x}<extra></extra>',
-          },
-        ]}
-        layout={{
-          autosize: true,
-          margin: { t: 12, r: 72, b: 48, l: 220 },
-          paper_bgcolor: 'transparent',
-          plot_bgcolor: 'transparent',
-          font: { family: 'Inter, system-ui, sans-serif', size: 12, color: '#6b7280' },
-          xaxis: {
-            showgrid: true,
-            gridcolor: 'rgba(243, 244, 246, 0.9)',
-            zeroline: false,
-            tickfont: { size: 11, color: '#9ca3af' },
-          },
-          yaxis: {
-            automargin: true,
-            showgrid: false,
-            tickfont: { size: 11, color: '#6b7280' },
-            zeroline: false,
-          },
-          showlegend: false,
-        }}
-        config={{ responsive: true, displayModeBar: false }}
-        useResizeHandler
-        style={{ width: '100%', height: '100%' }}
-      />
-    </div>
+    <>
+      <div className="h-[360px]">
+        <Plot
+          data={[
+            {
+              x: rows.map((row) => Number(row[valueKey] ?? 0)),
+              y: fullLabels.map((label) => shortLabel(label)),
+              type: 'bar',
+              orientation: 'h',
+              marker: { color: '#4c6ef5' },
+              text: rows.map((row) => formatValue(row[valueKey])),
+              textposition: 'outside',
+              customdata: fullLabels,
+              hovertemplate: '<b>%{customdata}</b><br>Count: %{x}<extra></extra>',
+            },
+          ]}
+          layout={{
+            autosize: true,
+            margin: { t: 12, r: 72, b: 48, l: 220 },
+            paper_bgcolor: 'transparent',
+            plot_bgcolor: 'transparent',
+            font: { family: 'Inter, system-ui, sans-serif', size: 12, color: '#6b7280' },
+            xaxis: {
+              showgrid: true,
+              gridcolor: 'rgba(243, 244, 246, 0.9)',
+              zeroline: false,
+              tickfont: { size: 11, color: '#9ca3af' },
+            },
+            yaxis: {
+              automargin: true,
+              showgrid: false,
+              tickfont: { size: 11, color: '#6b7280' },
+              zeroline: false,
+            },
+            showlegend: false,
+          }}
+          config={{ responsive: true, displayModeBar: false }}
+          onInitialized={(_, graphDiv) => {
+            plotRef.current = graphDiv
+          }}
+          onUpdate={(_, graphDiv) => {
+            plotRef.current = graphDiv
+          }}
+          useResizeHandler
+          style={{ width: '100%', height: '100%' }}
+        />
+      </div>
+      <div className="mt-3 flex justify-end">
+        <DownloadButton label="Download SVG" onClick={downloadChart} />
+      </div>
+    </>
   )
 }
 
-function EventTypeChart({ rows }: { rows: Record<string, unknown>[] }) {
+function EventTypeChart({ rows, fileName }: { rows: Record<string, unknown>[]; fileName: string }) {
   // Prefer backend CAMEO descriptions when present, but fall back to root codes for older signal builds.
   const labelledRows = rows.map((row) => ({
     ...row,
@@ -249,30 +406,39 @@ function EventTypeChart({ rows }: { rows: Record<string, unknown>[] }) {
       : formatValue(row.cameo_root),
   }))
 
-  return <BarChart rows={labelledRows} labelKey="label" valueKey="event_count" />
+  return <BarChart rows={labelledRows} labelKey="label" valueKey="event_count" fileName={fileName} />
 }
 
 export default function QueryResultChart({ intent, data }: QueryResultChartProps) {
-  const rows = asRecords(data)
+  const rows = useMemo(() => (isGraphData(data) ? data.edges : asRecords(data)), [data])
+  const preparedRows = useMemo(
+    () => prepareRowsForSignal(intent.signal, rows),
+    [intent.signal, rows],
+  )
+  const { rows: streamedRows, isStreaming } = useProgressiveRows(preparedRows)
+  const svgFileName = filenameFor(intent.signal, 'svg')
+  const jsonFileName = filenameFor(intent.signal, 'json')
 
   // The LLM chooses a signal; this component chooses the safest visual form for that signal's data shape.
   let content
-  if (intent.signal === 'event_volume') {
-    content = <LineChart rows={rows} yKey="event_count" yLabel="Events" />
+  if (isStreaming && streamedRows.length === 0) {
+    content = <StreamingPlaceholder />
+  } else if (intent.signal === 'event_volume') {
+    content = <LineChart rows={streamedRows} yKey="event_count" yLabel="Events" fileName={svgFileName} />
   } else if (intent.signal === 'tone_over_time') {
-    content = <LineChart rows={rows} yKey="avg_goldstein" yLabel="Avg Goldstein" />
+    content = <LineChart rows={streamedRows} yKey="avg_goldstein" yLabel="Avg Goldstein" fileName={svgFileName} />
   } else if (intent.signal === 'media_attention') {
-    content = <LineChart rows={rows} yKey="total_mentions" yLabel="Mentions" />
+    content = <LineChart rows={streamedRows} yKey="total_mentions" yLabel="Mentions" fileName={svgFileName} />
   } else if (intent.signal === 'actor_frequency') {
-    content = <BarChart rows={rows} labelKey="actor" valueKey="event_count" />
+    content = <BarChart rows={streamedRows} labelKey="actor" valueKey="event_count" fileName={svgFileName} />
   } else if (intent.signal === 'location_frequency') {
-    content = <BarChart rows={rows} labelKey="location" valueKey="event_count" />
+    content = <BarChart rows={streamedRows} labelKey="location" valueKey="event_count" fileName={svgFileName} />
   } else if (intent.signal === 'event_type') {
-    content = <EventTypeChart rows={rows} />
+    content = <EventTypeChart rows={streamedRows} fileName={svgFileName} />
   } else if (intent.signal === 'actor_location_graph' && isGraphData(data)) {
-    content = <ResultTable rows={data.edges} />
+    content = <ResultTable rows={streamedRows} fileName={jsonFileName} />
   } else {
-    content = <ResultTable rows={rows} />
+    content = <ResultTable rows={streamedRows} fileName={jsonFileName} />
   }
 
   return (
@@ -281,6 +447,11 @@ export default function QueryResultChart({ intent, data }: QueryResultChartProps
         <div>
           <h3 className="text-base font-semibold text-gray-900">{signalTitles[intent.signal]}</h3>
         </div>
+        {isStreaming && (
+          <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-600">
+            Streaming chart...
+          </span>
+        )}
       </div>
       {content}
     </div>
