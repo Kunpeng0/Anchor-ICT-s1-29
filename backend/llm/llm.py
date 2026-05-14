@@ -20,7 +20,7 @@ OLLAMA_BASE_URL = "http://localhost:11434"
 
 # The model name as it appears in Ollama (e.g. "phi3:mini", "sqlcoder:latest").
 # Update this once the model has been confirmed and pulled on the Jetson.
-OLLAMA_MODEL = "phi3:mini"
+OLLAMA_MODEL = "phi3.5:mini"
 
 # Timeout in seconds for the Ollama HTTP request.
 # 20 seconds is the client success criterion from the scoping document.

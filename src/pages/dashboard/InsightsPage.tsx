@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
-import { ArrowUp, Bot, Sparkles, User2 } from 'lucide-react'
-import QueryResultChart from '@/components/charts/QueryResultChart'
+import { ArrowUp, Bot, ChevronUp, Sparkles, User2 } from 'lucide-react'
+import QueryResultChart, { getAxisLabels } from '@/components/charts/QueryResultChart'
 
 type MessageRole = 'assistant' | 'user'
 
@@ -30,6 +30,7 @@ interface ChatMessage {
   role: MessageRole
   content: string
   result?: QueryResponse
+  duration?: number
 }
 
 const EVENT_NAME = 'sudan_2023'
@@ -68,12 +69,22 @@ async function submitQuery(promptText: string): Promise<QueryResponse> {
   return response.json() as Promise<QueryResponse>
 }
 
+// converts the intent params object into a readable string for the response footer
+// e.g. { period_type: "weekly" } -> "period_type: weekly"
+function formatParams(params: Record<string, unknown>): string {
+  const entries = Object.entries(params)
+  if (entries.length === 0) return 'none'
+  return entries.map(([k, v]) => `${k}: ${v}`).join(', ')
+}
+
 function MessageBubble({ message }: { message: ChatMessage }) {
   const isAssistant = message.role === 'assistant'
+  // expand the bubble to full width when it contains a chart
   const hasChart = isAssistant && Boolean(message.result)
 
   return (
     <div className={`flex gap-4 ${isAssistant ? 'justify-start' : 'justify-end'}`}>
+      {/* AI avatar — only shown on assistant messages */}
       {isAssistant && (
         <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-sm">
           <Bot className="h-5 w-5" />
@@ -91,10 +102,41 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         {message.content && <div className="whitespace-pre-wrap">{message.content}</div>}
 
         {isAssistant && message.result && (
-          <QueryResultChart intent={message.result.intent} data={message.result.data} />
+          <>
+            <QueryResultChart intent={message.result.intent} data={message.result.data} />
+
+            {/* response metadata footer — shows the signal, params, axis labels, and LLM response time */}
+            <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 border-t border-gray-100 pt-3 text-xs text-gray-400">
+              {/* signal name used to fetch the data from the database */}
+              <span>
+                <span className="font-medium text-gray-500">Signal:</span> {message.result.intent.signal}
+              </span>
+              {/* query parameters passed to the signal endpoint */}
+              <span>
+                <span className="font-medium text-gray-500">Params:</span> {formatParams(message.result.intent.params)}
+              </span>
+              {/* x and y axis labels for the chart — null for table-based signals */}
+              {(() => {
+                const axes = getAxisLabels(message.result.intent.signal)
+                return axes ? (
+                  <>
+                    <span><span className="font-medium text-gray-500">X:</span> {axes.x}</span>
+                    <span><span className="font-medium text-gray-500">Y:</span> {axes.y}</span>
+                  </>
+                ) : null
+              })()}
+              {/* total round-trip time from query submission to response received */}
+              {message.duration !== undefined && (
+                <span>
+                  <span className="font-medium text-gray-500">Response time:</span> {message.duration.toFixed(2)}s
+                </span>
+              )}
+            </div>
+          </>
         )}
       </div>
 
+      {/* user avatar — only shown on user messages */}
       {!isAssistant && (
         <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-gray-200 text-gray-700 shadow-sm">
           <User2 className="h-5 w-5" />
@@ -128,7 +170,7 @@ export default function InsightsPage() {
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isThinking, setIsThinking] = useState(false)
-  const [selectedStarterPrompt, setSelectedStarterPrompt] = useState('')
+  const [dropupOpen, setDropupOpen] = useState(false)
   const nextIdRef = useRef(1)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -153,12 +195,15 @@ export default function InsightsPage() {
     setIsThinking(true)
 
     try {
+      const start = performance.now()
       const result = await submitQuery(trimmed)
+      const duration = (performance.now() - start) / 1000
       const assistantMessage: ChatMessage = {
         id: nextIdRef.current++,
         role: 'assistant',
         content: '',
         result,
+        duration,
       }
       setMessages((current) => [...current, assistantMessage])
     } catch (error) {
@@ -181,9 +226,9 @@ export default function InsightsPage() {
     void submitPrompt(input)
   }
 
-  const handleStarterPromptChange = (promptText: string) => {
-    setSelectedStarterPrompt(promptText)
+  const handleDropupSelect = (promptText: string) => {
     setInput(promptText)
+    setDropupOpen(false)
     inputRef.current?.focus()
   }
 
@@ -243,39 +288,26 @@ export default function InsightsPage() {
 
       <div className="border-t border-white/70 bg-white/80 px-6 py-5 backdrop-blur-xl sm:px-8">
         <div className="mx-auto max-w-4xl">
-          {messages.length > 0 && (
-            <div className="mb-4 rounded-[24px] bg-white/90 px-4 py-4 shadow-sm ring-1 ring-gray-200">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-600">
-                    Next question
-                  </p>
-                  <p className="mt-1 text-sm text-gray-500">
-                    Pick one of the frequentlty asked question.
-                  </p>
-                </div>
-
-                <select
-                  value={selectedStarterPrompt}
-                  onChange={(event) => handleStarterPromptChange(event.target.value)}
-                  disabled={isThinking}
-                  className="min-w-[260px] rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:bg-gray-100"
-                >
-                  <option value="">Choose a question</option>
-                  {starterPrompts.map((prompt) => (
-                    <option key={prompt} value={prompt}>
-                      {prompt}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
-
           <form
             onSubmit={handleSubmit}
-            className="rounded-[30px] bg-white p-3 shadow-[0_18px_35px_rgba(15,23,42,0.07)] ring-1 ring-gray-200"
+            className="relative rounded-[30px] bg-white p-3 shadow-[0_18px_35px_rgba(15,23,42,0.07)] ring-1 ring-gray-200"
           >
+            {/* drop-up prompt menu — only shown after the first message */}
+            {messages.length > 0 && dropupOpen && (
+              <div className="absolute bottom-full left-0 mb-2 w-full rounded-[20px] bg-white shadow-[0_8px_30px_rgba(15,23,42,0.12)] ring-1 ring-gray-200 overflow-hidden">
+                {starterPrompts.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => handleDropupSelect(prompt)}
+                    className="w-full px-5 py-3 text-left text-sm text-gray-700 transition hover:bg-gray-50"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="flex items-end gap-3">
               <textarea
                 ref={inputRef}
@@ -285,6 +317,19 @@ export default function InsightsPage() {
                 placeholder="Ask for a chart..."
                 className="max-h-40 min-h-[52px] flex-1 resize-none border-0 bg-transparent px-3 py-3 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-0"
               />
+
+              {/* drop-up toggle button — only shown after the first message */}
+              {messages.length > 0 && (
+                <button
+                  type="button"
+                  disabled={isThinking}
+                  onClick={() => setDropupOpen((o) => !o)}
+                  className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-100 text-gray-600 transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label="Show suggested questions"
+                >
+                  <ChevronUp className={`h-5 w-5 transition-transform ${dropupOpen ? 'rotate-180' : ''}`} />
+                </button>
+              )}
 
               <button
                 type="submit"

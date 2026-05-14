@@ -11,6 +11,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/signals' : 'http://localhost:8000',
+      '/dashboard' : 'http://localhost:8000',
       '/graphs' : 'http://localhost:8000',
       '/health' : 'http://localhost:8000',
       '/events' : 'http://localhost:8000',

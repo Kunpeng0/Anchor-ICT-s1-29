@@ -126,8 +126,8 @@ function LineChart({
 }) {
   if (rows.length === 0) return <EmptyState />
 
-  // Dense time-series data becomes unreadable in a chat panel, so show the latest year of weekly points.
-  const visibleRows = rows.slice(-52)
+  // all returned rows are shown — Plotly's zoom/pan handles dense data fine
+  const visibleRows = rows
   const showMarkers = visibleRows.length <= 26
 
   return (
@@ -171,7 +171,7 @@ function LineChart({
           showlegend: false,
           hovermode: 'x unified',
         }}
-        config={{ responsive: true, displayModeBar: false }}
+        config={{ responsive: true, displayModeBar: false, scrollZoom: true }}
         useResizeHandler
         style={{ width: '100%', height: '100%' }}
       />
@@ -240,16 +240,54 @@ function BarChart({
   )
 }
 
+// CAMEO root code descriptions — the export CSV omits these so we map them client-side
+const CAMEO_LABELS: Record<string, string> = {
+  '01': 'Make Public Statement',
+  '02': 'Appeal',
+  '03': 'Express Intent to Cooperate',
+  '04': 'Consult',
+  '05': 'Engage in Diplomatic Cooperation',
+  '06': 'Engage in Material Cooperation',
+  '07': 'Provide Aid',
+  '08': 'Yield',
+  '09': 'Investigate',
+  '10': 'Demand',
+  '11': 'Disapprove',
+  '12': 'Reject',
+  '13': 'Threaten',
+  '14': 'Protest',
+  '15': 'Exhibit Military Posture',
+  '16': 'Reduce Relations',
+  '17': 'Coerce',
+  '18': 'Assault',
+  '19': 'Use of Force/Attack',
+  '20': 'Use Unconventional Mass Violence',
+}
+
 function EventTypeChart({ rows }: { rows: Record<string, unknown>[] }) {
-  // Prefer backend CAMEO descriptions when present, but fall back to root codes for older signal builds.
-  const labelledRows = rows.map((row) => ({
-    ...row,
-    label: row.cameo_description
-      ? `${formatValue(row.cameo_root)} - ${formatValue(row.cameo_description)}`
-      : formatValue(row.cameo_root),
-  }))
+  const labelledRows = rows.map((row) => {
+    const code = formatValue(row.cameo_root)
+    // prefer backend description if present, otherwise look up from CAMEO_LABELS
+    const description = row.cameo_description
+      ? formatValue(row.cameo_description)
+      : (CAMEO_LABELS[code] ?? code)
+    return { ...row, label: `${code} - ${description}` }
+  })
 
   return <BarChart rows={labelledRows} labelKey="label" valueKey="event_count" />
+}
+
+// returns the x/y axis labels for a given signal, or null for table-based signals
+export function getAxisLabels(signal: SignalName): { x: string; y: string } | null {
+  const map: Partial<Record<SignalName, { x: string; y: string }>> = {
+    event_volume:       { x: 'Date',  y: 'Events' },
+    tone_over_time:     { x: 'Date',  y: 'Goldstein' },
+    media_attention:    { x: 'Date',  y: 'Mentions' },
+    actor_frequency:    { x: 'Count', y: 'Actor' },
+    location_frequency: { x: 'Count', y: 'Location' },
+    event_type:         { x: 'Count', y: 'Event Type' },
+  }
+  return map[signal] ?? null
 }
 
 export default function QueryResultChart({ intent, data }: QueryResultChartProps) {
