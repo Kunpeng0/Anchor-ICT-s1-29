@@ -86,7 +86,9 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 
       <div
         className={`rounded-[28px] px-5 py-4 text-sm leading-7 shadow-sm ${
-          isAssistant ? 'bg-white text-gray-700 ring-1 ring-gray-200' : 'bg-gray-900 text-white'
+          isAssistant
+            ? 'bg-white text-gray-700 ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-100 dark:ring-gray-800'
+            : 'bg-gray-900 text-white dark:bg-brand-600'
         } ${hasChart ? 'w-full max-w-5xl' : 'max-w-3xl'}`}
       >
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
@@ -100,7 +102,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       </div>
 
       {!isAssistant && (
-        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-gray-200 text-gray-700 shadow-sm">
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-gray-200 text-gray-700 shadow-sm dark:bg-gray-800 dark:text-gray-200">
           <User2 className="h-5 w-5" />
         </div>
       )}
@@ -114,7 +116,7 @@ function LoadingBubble() {
       <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-sm">
         <Bot className="h-5 w-5" />
       </div>
-      <div className="rounded-[28px] bg-white px-5 py-4 shadow-sm ring-1 ring-gray-200">
+      <div className="rounded-[28px] bg-white px-5 py-4 shadow-sm ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-gray-800">
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
           Anchor AI
         </p>
@@ -192,8 +194,8 @@ export default function InsightsPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-7.5rem)] min-h-[680px] flex-col overflow-hidden rounded-[32px] bg-[radial-gradient(circle_at_top,#eef4ff_0%,#f8fafc_42%,#eef2f7_100%)] shadow-[0_28px_80px_rgba(15,23,42,0.08)] ring-1 ring-white/70">
-      <div className="border-b border-white/70 bg-white/65 px-8 py-5 backdrop-blur-xl">
+    <div className="insights-workspace flex h-[calc(100vh-7.5rem)] min-h-[680px] flex-col overflow-hidden rounded-[32px] bg-[radial-gradient(circle_at_top,#eef4ff_0%,#f8fafc_42%,#eef2f7_100%)] shadow-[0_28px_80px_rgba(15,23,42,0.08)] ring-1 ring-white/70 dark:bg-gray-950 dark:bg-none dark:shadow-none dark:ring-gray-800">
+      <div className="insights-workspace-header border-b border-white/70 bg-white/65 px-8 py-5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-950/80">
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-brand-600">
@@ -210,10 +212,10 @@ export default function InsightsPage() {
               <Bot className="h-10 w-10" />
             </div>
 
-            <h2 className="mt-8 text-4xl font-semibold tracking-tight text-gray-900">
+            <h2 className="insights-title mt-8 text-4xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
               Ask Anchor AI for a chart
             </h2>
-            <p className="mt-4 max-w-2xl text-base leading-8 text-gray-500">
+            <p className="insights-empty-copy mt-4 max-w-2xl text-base leading-8 text-gray-500 dark:text-gray-400">
               Choose a common question or ask about conflict activity, actors, locations, event types, tone, or media attention.
             </p>
 
@@ -223,7 +225,7 @@ export default function InsightsPage() {
                   key={prompt}
                   type="button"
                   onClick={() => void submitPrompt(prompt)}
-                  className="rounded-[24px] bg-white/90 px-5 py-4 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md"
+                  className="insights-prompt rounded-[24px] bg-white/90 px-5 py-4 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md dark:bg-gray-900 dark:text-gray-100 dark:ring-gray-800 dark:hover:bg-gray-800"
                 >
                   {prompt}
                 </button>
@@ -240,16 +242,16 @@ export default function InsightsPage() {
         )}
       </div>
 
-      <div className="border-t border-white/70 bg-white/80 px-6 py-5 backdrop-blur-xl sm:px-8">
+      <div className="insights-composer-bar border-t border-white/70 bg-white/80 px-6 py-5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-950/85 sm:px-8">
         <div className="mx-auto max-w-4xl">
           {messages.length > 0 && (
-            <div className="mb-4 rounded-[24px] bg-white/90 px-4 py-4 shadow-sm ring-1 ring-gray-200">
+            <div className="mb-4 rounded-[24px] bg-white/90 px-4 py-4 shadow-sm ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-gray-800">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-600">
                     Next question
                   </p>
-                  <p className="mt-1 text-sm text-gray-500">
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                     Pick one of the frequentlty asked question.
                   </p>
                 </div>
@@ -258,7 +260,7 @@ export default function InsightsPage() {
                   value={selectedStarterPrompt}
                   onChange={(event) => handleStarterPromptChange(event.target.value)}
                   disabled={isThinking}
-                  className="min-w-[260px] rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:bg-gray-100"
+                  className="min-w-[260px] rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 dark:focus:ring-brand-900 dark:disabled:bg-gray-800"
                 >
                   <option value="">Choose a question</option>
                   {starterPrompts.map((prompt) => (
@@ -273,7 +275,7 @@ export default function InsightsPage() {
 
           <form
             onSubmit={handleSubmit}
-            className="rounded-[30px] bg-white p-3 shadow-[0_18px_35px_rgba(15,23,42,0.07)] ring-1 ring-gray-200"
+            className="insights-input-shell rounded-[30px] bg-white p-3 shadow-[0_18px_35px_rgba(15,23,42,0.07)] ring-1 ring-gray-200 dark:bg-gray-900 dark:shadow-none dark:ring-gray-800"
           >
             <div className="flex items-end gap-3">
               <textarea
@@ -282,13 +284,13 @@ export default function InsightsPage() {
                 onChange={(event) => setInput(event.target.value)}
                 rows={1}
                 placeholder="Ask for a chart..."
-                className="max-h-40 min-h-[52px] flex-1 resize-none border-0 bg-transparent px-3 py-3 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-0"
+                className="max-h-40 min-h-[52px] flex-1 resize-none border-0 bg-transparent px-3 py-3 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-0 dark:text-gray-100 dark:placeholder:text-gray-500"
               />
 
               <button
                 type="submit"
                 disabled={!input.trim() || isThinking}
-                className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-900 text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-gray-300"
+                className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-900 text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-gray-300 dark:bg-brand-600 dark:hover:bg-brand-500 dark:disabled:bg-gray-700"
                 aria-label="Send query"
               >
                 <ArrowUp className="h-5 w-5" />

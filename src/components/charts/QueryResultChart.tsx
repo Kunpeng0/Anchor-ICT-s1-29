@@ -112,12 +112,22 @@ function filenameFor(signal: SignalName, extension: string) {
   return `anchor-${signal}-${timestamp}.${extension}`
 }
 
+function getPlotTheme() {
+  const isDark = document.documentElement.classList.contains('dark')
+  return {
+    axisColor: isDark ? '#e5e7eb' : '#9ca3af',
+    labelColor: isDark ? '#f9fafb' : '#6b7280',
+    gridColor: isDark ? 'rgba(148, 163, 184, 0.3)' : 'rgba(243, 244, 246, 0.9)',
+    fillColor: isDark ? 'rgba(76, 110, 245, 0.24)' : 'rgba(76, 110, 245, 0.08)',
+  }
+}
+
 function DownloadButton({ label, onClick }: DownloadButtonProps) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 shadow-sm transition hover:bg-gray-50 hover:text-gray-900"
+      className="query-download-button inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 shadow-sm transition hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-800"
       title={label}
     >
       <Download className="h-3.5 w-3.5" />
@@ -186,7 +196,7 @@ function isGraphData(data: unknown): data is { edges: Record<string, unknown>[] 
 
 function EmptyState() {
   return (
-    <div className="flex h-56 items-center justify-center rounded-lg bg-gray-50 text-sm text-gray-400">
+    <div className="flex h-56 items-center justify-center rounded-lg bg-gray-50 text-sm text-gray-400 dark:bg-gray-950 dark:text-gray-500">
       No data returned for this query.
     </div>
   )
@@ -194,11 +204,11 @@ function EmptyState() {
 
 function StreamingPlaceholder() {
   return (
-    <div className="flex h-[360px] flex-col justify-end gap-3 rounded-lg bg-white/60 px-6 py-8">
-      <div className="h-4 w-2/3 animate-pulse rounded-full bg-brand-100" />
-      <div className="h-4 w-5/6 animate-pulse rounded-full bg-brand-100 [animation-delay:120ms]" />
-      <div className="h-4 w-1/2 animate-pulse rounded-full bg-brand-100 [animation-delay:240ms]" />
-      <div className="h-4 w-3/4 animate-pulse rounded-full bg-brand-100 [animation-delay:360ms]" />
+    <div className="flex h-[360px] flex-col justify-end gap-3 rounded-lg bg-white/60 px-6 py-8 dark:bg-gray-950/70">
+      <div className="h-4 w-2/3 animate-pulse rounded-full bg-brand-100 dark:bg-brand-900/50" />
+      <div className="h-4 w-5/6 animate-pulse rounded-full bg-brand-100 [animation-delay:120ms] dark:bg-brand-900/50" />
+      <div className="h-4 w-1/2 animate-pulse rounded-full bg-brand-100 [animation-delay:240ms] dark:bg-brand-900/50" />
+      <div className="h-4 w-3/4 animate-pulse rounded-full bg-brand-100 [animation-delay:360ms] dark:bg-brand-900/50" />
     </div>
   )
 }
@@ -211,9 +221,9 @@ function ResultTable({ rows, fileName }: { rows: Record<string, unknown>[]; file
 
   return (
     <>
-      <div className="max-h-72 overflow-auto rounded-lg border border-gray-200">
-        <table className="min-w-full divide-y divide-gray-200 text-left text-xs">
-          <thead className="sticky top-0 bg-gray-50 text-gray-500">
+      <div className="max-h-72 overflow-auto rounded-lg border border-gray-200 dark:border-gray-800">
+        <table className="min-w-full divide-y divide-gray-200 text-left text-xs dark:divide-gray-800">
+          <thead className="sticky top-0 bg-gray-50 text-gray-500 dark:bg-gray-950 dark:text-gray-400">
             <tr>
               {columns.map((column) => (
                 <th key={column} className="px-3 py-2 font-semibold">
@@ -222,7 +232,7 @@ function ResultTable({ rows, fileName }: { rows: Record<string, unknown>[]; file
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100 bg-white text-gray-700">
+          <tbody className="divide-y divide-gray-100 bg-white text-gray-700 dark:divide-gray-800 dark:bg-gray-900 dark:text-gray-300">
             {rows.slice(0, 20).map((row, index) => (
               <tr key={index}>
                 {columns.map((column) => (
@@ -257,6 +267,7 @@ function LineChart({
 
   if (rows.length === 0) return <EmptyState />
 
+  const plotTheme = getPlotTheme()
   const showMarkers = rows.length <= 26
   const downloadChart = () => {
     downloadPlotSvg(plotRef.current, fileName)
@@ -264,7 +275,7 @@ function LineChart({
 
   return (
     <>
-      <div className="h-[360px]">
+      <div className="query-plot-frame h-[360px]">
         <Plot
           data={[
             {
@@ -275,7 +286,7 @@ function LineChart({
               line: { color: '#4c6ef5', width: 2.5 },
               marker: { color: '#4c6ef5', size: 5 },
               fill: 'tozeroy',
-              fillcolor: 'rgba(76, 110, 245, 0.08)',
+              fillcolor: plotTheme.fillColor,
               hovertemplate: `%{x}<br>${yLabel}: %{y}<extra></extra>`,
             },
           ]}
@@ -284,22 +295,22 @@ function LineChart({
             margin: { t: 12, r: 24, b: 56, l: 72 },
             paper_bgcolor: 'transparent',
             plot_bgcolor: 'transparent',
-            font: { family: 'Inter, system-ui, sans-serif', size: 12, color: '#6b7280' },
+            font: { family: 'Inter, system-ui, sans-serif', size: 13, color: plotTheme.labelColor },
             xaxis: {
               automargin: true,
               nticks: 7,
               showgrid: false,
               tickangle: 0,
-              tickfont: { size: 11, color: '#9ca3af' },
+              tickfont: { size: 12, color: plotTheme.axisColor },
               zeroline: false,
             },
             yaxis: {
               automargin: true,
               showgrid: true,
-              gridcolor: 'rgba(243, 244, 246, 0.9)',
+              gridcolor: plotTheme.gridColor,
               zeroline: false,
-              tickfont: { size: 11, color: '#9ca3af' },
-              title: { text: yLabel, font: { size: 11, color: '#9ca3af' } },
+              tickfont: { size: 12, color: plotTheme.axisColor },
+              title: { text: yLabel, font: { size: 12, color: plotTheme.axisColor } },
             },
             showlegend: false,
             hovermode: 'x unified',
@@ -337,6 +348,7 @@ function BarChart({
 
   if (rows.length === 0) return <EmptyState />
 
+  const plotTheme = getPlotTheme()
   const fullLabels = rows.map((row) => formatValue(row[labelKey]))
   const downloadChart = () => {
     downloadPlotSvg(plotRef.current, fileName)
@@ -344,7 +356,7 @@ function BarChart({
 
   return (
     <>
-      <div className="h-[360px]">
+      <div className="query-plot-frame h-[360px]">
         <Plot
           data={[
             {
@@ -355,6 +367,7 @@ function BarChart({
               marker: { color: '#4c6ef5' },
               text: rows.map((row) => formatValue(row[valueKey])),
               textposition: 'outside',
+              textfont: { size: 12, color: plotTheme.labelColor },
               customdata: fullLabels,
               hovertemplate: '<b>%{customdata}</b><br>Count: %{x}<extra></extra>',
             },
@@ -364,17 +377,17 @@ function BarChart({
             margin: { t: 12, r: 72, b: 48, l: 220 },
             paper_bgcolor: 'transparent',
             plot_bgcolor: 'transparent',
-            font: { family: 'Inter, system-ui, sans-serif', size: 12, color: '#6b7280' },
+            font: { family: 'Inter, system-ui, sans-serif', size: 13, color: plotTheme.labelColor },
             xaxis: {
               showgrid: true,
-              gridcolor: 'rgba(243, 244, 246, 0.9)',
+              gridcolor: plotTheme.gridColor,
               zeroline: false,
-              tickfont: { size: 11, color: '#9ca3af' },
+              tickfont: { size: 12, color: plotTheme.axisColor },
             },
             yaxis: {
               automargin: true,
               showgrid: false,
-              tickfont: { size: 11, color: '#6b7280' },
+              tickfont: { size: 12, color: plotTheme.labelColor },
               zeroline: false,
             },
             showlegend: false,
@@ -442,13 +455,13 @@ export default function QueryResultChart({ intent, data }: QueryResultChartProps
   }
 
   return (
-    <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50/70 p-6">
+    <div className="query-result-panel mt-4 rounded-xl border border-gray-200 bg-gray-50/70 p-6 dark:border-gray-800 dark:bg-gray-950/70">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold text-gray-900">{signalTitles[intent.signal]}</h3>
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">{signalTitles[intent.signal]}</h3>
         </div>
         {isStreaming && (
-          <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-600">
+          <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-600 dark:bg-brand-900/30 dark:text-brand-200">
             Streaming chart...
           </span>
         )}

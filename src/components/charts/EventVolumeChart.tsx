@@ -34,6 +34,11 @@ const mockWeekly: EventVolumePoint[] = [
 ]
 
 export default function EventVolumeChart({ periodType }: EventVolumeChartProps) {
+    const isDark = document.documentElement.classList.contains('dark')
+    const axisColor = isDark ? '#cbd5e1' : '#9ca3af'
+    const labelColor = isDark ? '#e5e7eb' : '#6b7280'
+    const gridColor = isDark ? 'rgba(148, 163, 184, 0.22)' : 'rgba(243, 244, 246, 0.8)'
+
     // selecting which dataset based on period type prop
     const data = periodType === 'daily' ? mockDaily : mockWeekly
 
@@ -66,7 +71,7 @@ export default function EventVolumeChart({ periodType }: EventVolumeChartProps) 
                     smoothing: 1.3,
                 },
                 fill: 'tozeroy',
-                fillcolor: 'rgba(76, 110, 245, 0.08)',
+                fillcolor: isDark ? 'rgba(76, 110, 245, 0.18)' : 'rgba(76, 110, 245, 0.08)',
 
                 hovertemplate: '%{x}<br>Events: %{y}<extra></extra>', // controls what appears in tooltip when hovering over a point
             },
@@ -80,26 +85,26 @@ export default function EventVolumeChart({ periodType }: EventVolumeChartProps) 
             font: {
                 family: 'Inter, system-ui, sans-serif',
                 size: 12,
-                color: '#6b7280'
+                color: labelColor
             },
 
             xaxis: {
                 tickangle: 0,
                 showgrid: false,
                 zeroline: false,
-                tickfont: { size: 11, color: '#9ca3af' },
+                tickfont: { size: 11, color: axisColor },
                 showline: false,
             },
 
             yaxis: {
                 rangemode: 'normal',
                 showgrid: true,
-                gridcolor: 'rgba(243, 244, 246, 0.8)',
+                gridcolor: gridColor,
                 zeroline: false,
-                tickfont: { size: 11, color: '#9ca3af' },
+                tickfont: { size: 11, color: axisColor },
                 title: {
                     text: 'Event Count',
-                    font: { size: 11, color: '#9ca3af' },
+                    font: { size: 11, color: axisColor },
                     standoff: 20,
                 },
             },

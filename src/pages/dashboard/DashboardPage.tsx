@@ -24,7 +24,7 @@ export default function DashboardPage() {
 
       { /* period toggle button */ }
       <div className="flex items-center gap-2">
-        <span className="text-sm text-gray-500">View by:</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">View by:</span>
         <button 
           onClick={() => setPeriodType('daily')} 
           className={periodType === 'daily' ? 'btn-primary' : 'btn-secondary'}
@@ -43,7 +43,7 @@ export default function DashboardPage() {
         {/* Left column - Chart and Table */}
         <div className="space-y-6">
           <div className="card">
-            <h2 className="text-base font-semibold text-gray-900">Conflict Timeline</h2>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Conflict Timeline</h2>
             <div className="mt-4 h-56">
               {/* inserting event volume chart */ }
               <EventVolumeChart periodType={periodType} />
@@ -51,7 +51,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="card">
-            <h2 className="text-base font-semibold text-gray-900">Conflict Breakdown</h2>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Conflict Breakdown</h2>
             <div className="mt-4 h-56">
               <EventTypeChart />
             </div>
@@ -60,8 +60,8 @@ export default function DashboardPage() {
 
         {/* Right column - Map */}
         <div className="card">
-          <h2 className="text-base font-semibold text-gray-900">Map</h2>
-          <div className="mt-4 h-[320px] flex items-center justify-center rounded-lg bg-gray-50 text-sm text-gray-400">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Map</h2>
+          <div className="mt-4 flex h-[320px] items-center justify-center rounded-lg bg-gray-50 text-sm text-gray-400 ring-1 ring-gray-100 dark:bg-gray-950 dark:text-gray-500 dark:ring-gray-800">
             [ Map goes here ]
           </div>
         </div>
