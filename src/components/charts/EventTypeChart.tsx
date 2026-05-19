@@ -13,6 +13,11 @@ const mockData: EventTypePoint[] = [
 ]
 
 export default function EventTypeChart() {
+    const isDark = document.documentElement.classList.contains('dark')
+    const axisColor = isDark ? '#cbd5e1' : '#9ca3af'
+    const labelColor = isDark ? '#e5e7eb' : '#6b7280'
+    const gridColor = isDark ? 'rgba(148, 163, 184, 0.22)' : 'rgba(243, 244, 246, 0.8)'
+
     // sorted in ascending order so longest bar appears top
     const sorted = [...mockData].sort((a, b) => a.event_count - b.event_count)
 
@@ -41,7 +46,7 @@ export default function EventTypeChart() {
 
                     text: values.map(String),
                     textposition: 'outside',
-                    textfont: { size: 11, color: '#6b7280' },
+                    textfont: { size: 11, color: labelColor },
                 },
             ]}
 
@@ -54,16 +59,16 @@ export default function EventTypeChart() {
                 font: {
                     family: 'Inter, system-ui, sans-serif',
                     size: 12,
-                    color: '#6b7280'
+                    color: labelColor
                 },
 
                 bargap: 0.4,
 
                 xaxis: {
                     showgrid: true,
-                    gridcolor: 'rgba(243, 244, 246, 0.8)',
+                    gridcolor: gridColor,
                     zeroline: false,
-                    tickfont: { size: 11, color: '#9ca3af' },
+                    tickfont: { size: 11, color: axisColor },
                     showline: false,
                     range: [0, Math.max(...values) * 1.15], 
                 },
@@ -71,7 +76,7 @@ export default function EventTypeChart() {
                 yaxis: {
                     showgrid: false,
                     zeroline: false,
-                    tickfont: { size: 11, color: '#6b7280' },
+                    tickfont: { size: 11, color: labelColor },
                 },
                 showlegend: false,
                 hovermode: 'closest',

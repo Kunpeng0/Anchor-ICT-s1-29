@@ -9,6 +9,7 @@ import os
 import sqlite3
 import sys
 import tempfile
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -202,6 +203,17 @@ def test_get_events(db):
 # ---------------------------------------------------------------------------
 # Tests — signal endpoints
 # ---------------------------------------------------------------------------
+
+def test_get_llm_models(db):
+    client = get_client(db)
+    r = client.get("/llm/models")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["default"] == "phi3:mini"
+    assert "phi3:mini" in data["models"]
+    assert "gemma3:4b" in data["models"]
+    print(f"  PASS - GET /llm/models: {data}")
+
 
 def test_event_volume_daily(db):
     client = get_client(db)
@@ -458,7 +470,8 @@ def test_query_empty_string_returns_400(db):
 
 def test_query_llm_unavailable_returns_503(db):
     client = get_client(db)
-    r = client.post("/query", json={"query": "Show event volume over time"})
+    with patch("backend.api.main._call_llm", side_effect=ConnectionError("Ollama unavailable")):
+        r = client.post("/query", json={"query": "Show event volume over time"})
     assert r.status_code == 503
     assert "LLM service unavailable" in r.json()["detail"]
     print("  PASS — POST /query with LLM unavailable returns 503")
@@ -471,6 +484,14 @@ def test_query_unknown_event_returns_404(db):
     print("  PASS — POST /query with unknown event returns 404")
 
 
+def test_query_unknown_model_returns_400(db):
+    client = get_client(db)
+    r = client.post("/query", json={"query": "Show volume", "model": "unknown:model"})
+    assert r.status_code == 400
+    assert "Unsupported model" in r.json()["detail"]
+    print("  PASS - POST /query with unknown model returns 400")
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -481,6 +502,7 @@ if __name__ == "__main__":
     tests = [
         test_health,
         test_get_events,
+        test_get_llm_models,
         test_event_volume_daily,
         test_event_volume_weekly,
         test_event_volume_invalid_period_type,
@@ -504,6 +526,7 @@ if __name__ == "__main__":
         test_query_empty_string_returns_400,
         test_query_llm_unavailable_returns_503,
         test_query_unknown_event_returns_404,
+        test_query_unknown_model_returns_400,
     ]
 
     passed = 0

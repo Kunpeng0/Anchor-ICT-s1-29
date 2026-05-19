@@ -37,7 +37,7 @@ from backend.db.db import (
     update_graph_visibility,
 )
 from backend.ingestion.fetcher import run_fetch
-from backend.llm.llm import call_llm
+from backend.llm.llm import AVAILABLE_OLLAMA_MODELS, DEFAULT_OLLAMA_MODEL, call_llm
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -106,6 +106,7 @@ class RateGraphRequest(BaseModel):
 class LLMQueryRequest(BaseModel):
     query: str
     event_name: str | None = None  # defaults to DEFAULT_EVENT if not provided
+    model: str | None = None  # defaults to DEFAULT_OLLAMA_MODEL if not provided
 
 
 class VisibilityRequest(BaseModel):
@@ -132,6 +133,15 @@ def get_events() -> dict:
     return {
         "events": list_events(),
         "default": DEFAULT_EVENT,
+    }
+
+
+@app.get("/llm/models", tags=["Config"])
+def get_llm_models() -> dict:
+    """Return the local Ollama models this app allows users to select."""
+    return {
+        "models": list(AVAILABLE_OLLAMA_MODELS),
+        "default": DEFAULT_OLLAMA_MODEL,
     }
 
 
@@ -342,10 +352,17 @@ def llm_query(body: LLMQueryRequest) -> dict:
     event_name = body.event_name or DEFAULT_EVENT
     _validate_event(event_name)
 
+    model = body.model or DEFAULT_OLLAMA_MODEL
+    if model not in AVAILABLE_OLLAMA_MODELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported model '{model}'. Available models: {list(AVAILABLE_OLLAMA_MODELS)}",
+        )
+
     # LLM call — Tze Shen Ng's responsibility; placeholder returns an error
     # until the Ollama integration is wired in.
     try:
-        intent = _call_llm(query)
+        intent = _call_llm(query, model)
     except Exception as e:
         logger.error(f"[llm] LLM call failed: {e}")
         raise HTTPException(
@@ -361,17 +378,18 @@ def llm_query(body: LLMQueryRequest) -> dict:
     return {
         "query":      query,
         "event_name": event_name,
+        "model":      model,
         "intent":     intent,
         "data":       data,
     }
 
 
-def _call_llm(query: str) -> dict:
+def _call_llm(query: str, model: str | None = None) -> dict:
     """
     Delegate to backend.llm.llm.call_llm().
     All LLM logic lives in backend/llm/llm.py — edit that file, not this one.
     """
-    return call_llm(query)
+    return call_llm(query, model=model)
 
 
 def _resolve_intent(intent: dict, event_name: str) -> list | dict:

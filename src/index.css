@@ -3,8 +3,20 @@
 @tailwind utilities;
 
 @layer base {
+  html,
   body {
     @apply bg-gray-50 text-gray-900 antialiased;
+  }
+
+  .dark,
+  .dark body {
+    @apply bg-gray-950 text-gray-100;
+  }
+
+  .dark select,
+  .dark input,
+  .dark textarea {
+    color-scheme: dark;
   }
 }
 
@@ -17,5 +29,121 @@
   }
   .card {
     @apply rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100;
+  }
+
+  .dark .btn-secondary {
+    @apply bg-gray-900 text-gray-100 ring-gray-700 hover:bg-gray-800;
+  }
+
+  .dark .card {
+    @apply bg-gray-900 shadow-none ring-gray-800;
+  }
+
+  .dark .bg-white {
+    @apply bg-gray-950;
+  }
+
+  .dark .bg-gray-50 {
+    @apply bg-gray-900;
+  }
+
+  .dark .bg-gray-100,
+  .dark .bg-gray-200 {
+    @apply bg-gray-800;
+  }
+
+  .dark .bg-brand-50 {
+    background-color: rgb(54 79 199 / 0.3);
+  }
+
+  .dark .text-brand-700,
+  .dark .text-brand-800 {
+    color: #dbe4ff;
+  }
+
+  .dark .border-gray-200 {
+    @apply border-gray-800;
+  }
+
+  .dark .ring-gray-200,
+  .dark .ring-gray-100 {
+    @apply ring-gray-800;
+  }
+
+  .dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]),
+  .dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) {
+    @apply border-gray-800;
+  }
+
+  .dark .text-gray-900,
+  .dark .text-gray-800 {
+    color: #f3f4f6;
+  }
+
+  .dark .text-gray-700,
+  .dark .text-gray-600 {
+    color: #d1d5db;
+  }
+
+  .dark .text-gray-500 {
+    color: #9ca3af;
+  }
+
+  .dark .text-gray-400 {
+    color: #9ca3af;
+  }
+
+  .dark .insights-workspace {
+    background: #030712 !important;
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+
+  .dark .insights-workspace-header,
+  .dark .insights-composer-bar {
+    background: rgb(3 7 18 / 0.92) !important;
+    border-color: #1f2937 !important;
+  }
+
+  .dark .insights-title {
+    color: #f9fafb !important;
+  }
+
+  .dark .insights-empty-copy {
+    color: #cbd5e1 !important;
+  }
+
+  .dark .insights-prompt {
+    background: #111827 !important;
+    color: #e5e7eb !important;
+    box-shadow: 0 0 0 1px #374151 !important;
+  }
+
+  .dark .insights-prompt:hover {
+    background: #1f2937 !important;
+  }
+
+  .dark .insights-input-shell {
+    background: #020617 !important;
+    box-shadow: 0 0 0 1px #1f2937 !important;
+  }
+
+  .dark .query-result-panel {
+    background: #111827 !important;
+    border-color: #374151 !important;
+  }
+
+  .dark .query-plot-frame {
+    background: #111827 !important;
+  }
+
+  .dark .query-download-button {
+    background: #020617 !important;
+    border-color: #4b5563 !important;
+    color: #f9fafb !important;
+  }
+
+  .dark .query-download-button:hover {
+    background: #1f2937 !important;
   }
 }
