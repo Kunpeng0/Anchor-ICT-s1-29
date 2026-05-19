@@ -14,6 +14,7 @@ export default defineConfig({
       '/graphs' : 'http://localhost:8000',
       '/health' : 'http://localhost:8000',
       '/events' : 'http://localhost:8000',
+      '/llm' : 'http://localhost:8000',
       '/query' : 'http://localhost:8000',
     },
   },

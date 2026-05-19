@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { ArrowUp, Bot, Sparkles, User2 } from 'lucide-react'
 import QueryResultChart from '@/components/charts/QueryResultChart'
+import { LlmModel, getLlmModelLabel, getStoredLlmModel } from '@/lib/llmModels'
 
 type MessageRole = 'assistant' | 'user'
 
@@ -21,6 +22,7 @@ interface QueryIntent {
 interface QueryResponse {
   query: string
   event_name: string
+  model: string
   intent: QueryIntent
   data: unknown
 }
@@ -43,13 +45,14 @@ const starterPrompts = [
   'Show average conflict tone over time.',
 ]
 
-async function submitQuery(promptText: string): Promise<QueryResponse> {
+async function submitQuery(promptText: string, model: LlmModel): Promise<QueryResponse> {
   const response = await fetch('/query', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       query: promptText,
       event_name: EVENT_NAME,
+      model,
     }),
   })
 
@@ -135,6 +138,7 @@ export default function InsightsPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isThinking, setIsThinking] = useState(false)
   const [selectedStarterPrompt, setSelectedStarterPrompt] = useState('')
+  const [llmModel] = useState<LlmModel>(getStoredLlmModel)
   const nextIdRef = useRef(1)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -159,7 +163,7 @@ export default function InsightsPage() {
     setIsThinking(true)
 
     try {
-      const result = await submitQuery(trimmed)
+      const result = await submitQuery(trimmed, llmModel)
       const assistantMessage: ChatMessage = {
         id: nextIdRef.current++,
         role: 'assistant',
@@ -201,6 +205,10 @@ export default function InsightsPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-brand-600">
               Anchor Analyst Workspace
             </p>
+          </div>
+          <div className="flex items-center gap-2 rounded-2xl bg-white/80 px-3 py-2 text-xs font-semibold text-gray-600 ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-800">
+            <Sparkles className="h-4 w-4 text-brand-500" />
+            {getLlmModelLabel(llmModel)}
           </div>
         </div>
       </div>

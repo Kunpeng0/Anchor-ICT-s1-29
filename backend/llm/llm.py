@@ -18,9 +18,9 @@ logger = logging.getLogger(__name__)
 # Default port is 11434. Update if your Ollama instance uses a different port.
 OLLAMA_BASE_URL = "http://localhost:11434"
 
-# The model name as it appears in Ollama (e.g. "phi3:mini", "sqlcoder:latest").
-# Update this once the model has been confirmed and pulled on the Jetson.
-OLLAMA_MODEL = "phi3:mini"
+# The model names as they appear in Ollama.
+DEFAULT_OLLAMA_MODEL = "phi3:mini"
+AVAILABLE_OLLAMA_MODELS = ("phi3:mini", "gemma3:4b")
 
 # Timeout in seconds for the Ollama HTTP request.
 # 20 seconds is the client success criterion from the scoping document.
@@ -76,7 +76,7 @@ Example output:
 # Public entry point — called by main.py
 # ---------------------------------------------------------------------------
 
-def call_llm(query: str) -> dict:
+def call_llm(query: str, model: str | None = None) -> dict:
     """
     Send a plain-English query to the local Ollama instance and return a
     parsed intent dict.
@@ -96,9 +96,12 @@ def call_llm(query: str) -> dict:
     ConnectionError if Ollama is unreachable.
     ValueError if the model returns invalid or unparseable JSON.
     """
-    logger.info(f"[llm] Sending query to Ollama: {query!r}")
+    selected_model = model or DEFAULT_OLLAMA_MODEL
+    _validate_model(selected_model)
 
-    raw_response = _call_ollama(query)
+    logger.info(f"[llm] Sending query to Ollama model {selected_model}: {query!r}")
+
+    raw_response = _call_ollama(query, selected_model)
     logger.info(f"[llm] Raw response from Ollama: {raw_response!r}")
 
     intent = _parse_intent(raw_response)
@@ -112,7 +115,7 @@ def call_llm(query: str) -> dict:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _call_ollama(query: str) -> str:
+def _call_ollama(query: str, model: str) -> str:
     """
     Send the query to the Ollama /api/chat endpoint and return the raw
     response text.
@@ -129,7 +132,7 @@ def _call_ollama(query: str) -> str:
     url = f"{OLLAMA_BASE_URL}/api/chat"
 
     payload = {
-        "model": OLLAMA_MODEL,
+        "model": model,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": query},
@@ -207,4 +210,13 @@ def _validate_intent(intent: dict) -> None:
     if not isinstance(intent["params"], dict):
         raise ValueError(
             f"LLM intent 'params' must be a dict, got: {type(intent['params'])}"
+        )
+
+
+def _validate_model(model: str) -> None:
+    """Ensure only supported local Ollama models can be requested."""
+    if model not in AVAILABLE_OLLAMA_MODELS:
+        raise ValueError(
+            f"Unsupported Ollama model: {model!r}. "
+            f"Available models: {list(AVAILABLE_OLLAMA_MODELS)}"
         )

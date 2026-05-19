@@ -128,6 +128,25 @@ def test_call_llm_strips_markdown_and_returns_intent():
     print(f"  PASS — call_llm() handles markdown-wrapped response: {result}")
 
 
+def test_call_llm_uses_selected_model():
+    content = '{"chart_type": "line", "signal": "event_volume", "params": {"period_type": "weekly"}}'
+    with patch("backend.llm.llm.requests.post", return_value=mock_ollama_response(content)) as mock_post:
+        result = call_llm("Show event volume", model="gemma3:4b")
+    assert result["signal"] == "event_volume"
+    assert mock_post.call_args.kwargs["json"]["model"] == "gemma3:4b"
+    print("  PASS - call_llm() sends the selected Ollama model")
+
+
+def test_call_llm_unknown_model_raises_value_error():
+    raised = False
+    try:
+        call_llm("Show event volume", model="unknown:model")
+    except ValueError:
+        raised = True
+    assert raised, "Should raise ValueError for unsupported model"
+    print("  PASS - call_llm() rejects unsupported Ollama models")
+
+
 def test_call_llm_connection_error_raises():
     import requests as req
     with patch("backend.llm.llm.requests.post", side_effect=req.exceptions.ConnectionError("refused")):
@@ -193,6 +212,8 @@ if __name__ == "__main__":
         test_validate_intent_all_valid_signals,
         test_call_llm_returns_parsed_intent,
         test_call_llm_strips_markdown_and_returns_intent,
+        test_call_llm_uses_selected_model,
+        test_call_llm_unknown_model_raises_value_error,
         test_call_llm_connection_error_raises,
         test_call_llm_timeout_raises,
         test_call_llm_invalid_json_raises_value_error,
