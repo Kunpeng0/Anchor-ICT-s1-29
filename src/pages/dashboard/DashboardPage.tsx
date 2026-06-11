@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Users, DollarSign, TrendingUp, ShoppingCart, TrendingDown, BookMarked, Trash2, Loader2, BarChart2 } from 'lucide-react'
+import { Users, TrendingUp, TrendingDown, BookMarked, Trash2, Loader2, BarChart2, Activity } from 'lucide-react'
 import StatCard from '@/components/ui/StatCard'
 import EventVolumeChart from '@/components/charts/EventVolumeChart'
 import EventTypeChart from '@/components/charts/EventTypeChart'
@@ -9,13 +9,6 @@ import LocationMap from '@/components/charts/LocationMap'
 
 const BASE_URL = 'http://localhost:8000'
 const EVENT_NAME = 'sudan_2023'
-
-const stats = [
-  { label: 'Events', value: '5412', delta: 12.5, icon: TrendingUp, tooltip: 'Tooltip used for description of metric cards' },
-  { label: 'Conflict Intensity', value: '58%', delta: 8.1, icon: TrendingUp, tooltip: 'Tooltip used for description of metric cards' },
-  { label: 'Active Actors', value: '4.6%', delta: 1.3, icon: TrendingUp, tooltip: 'Tooltip used for description of metric cards' },
-  { label: 'Media Mentions', value: '8003', delta: -14, icon: TrendingDown, tooltip: 'Tooltip used for description of metric cards' },
-]
 
 interface SavedGraphRow {
   id: number
@@ -35,10 +28,92 @@ interface ResolvedGraph {
   created_at: string
 }
 
+// interfaces for the four metric API responses and stat card values
+interface DashboardSummary { 
+  event_count: number 
+}
+
+interface ActorRow { 
+  actor: string; event_count: number 
+}
+
+interface ToneRow { 
+  period: string; avg_goldstein: number 
+}
+
+interface MediaRow { 
+  period: string; total_mentions: number 
+}
+
+interface MetricValues { 
+  totalEvents: string; 
+  topActor: string; 
+  avgGoldstein: string; 
+  mediaMentions: string 
+}
+
 async function callApi(path: string): Promise<unknown> {
   const res = await fetch(`${BASE_URL}${path}`)
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
   return res.json()
+}
+
+// hook fetching all four stat card values in parallel
+// returns dashes immediately and updates when all four requests resolve
+function useMetrics(eventName: string) {
+  // initialize with dashes so cards show a placeholder while loading
+  const [metrics, setMetrics] = useState<MetricValues>({
+    totalEvents: '—',
+    topActor: '—',
+    avgGoldstein: '—',
+    mediaMentions: '—',
+  })
+
+  useEffect(() => {
+    // run all four requests at same time so cards populate together
+    Promise.all([
+      // /dashboard/summary returns event_count
+      callApi(`/dashboard/${eventName}/summary`),
+
+      // limit=1 returns only most frequent actor
+      callApi(`/signals/${eventName}/actor-frequency?limit=1`),
+
+      // weekly tone value
+      callApi(`/signals/${eventName}/tone-over-time?period_type=weekly`),
+
+      // daily media: sum all rows to get the total mentions across the whole conflict
+      callApi(`/signals/${eventName}/media-attention?period_type=daily`),
+    ])
+      .then(([summary, actors, tone, media]) => {
+        // total events: read event_count directly
+        const totalEvents = (
+          (summary as DashboardSummary).event_count ?? 0
+        ).toLocaleString()
+
+        // top actor: limit=1 means only one actor name comes back
+        const actorRows = actors as ActorRow[]
+        const topActor = actorRows.length > 0 ? actorRows[0].actor : '—'
+
+        // avg goldstein: take last element of weekly array for the most recent period
+        const toneRows = tone as ToneRow[]
+        const avgGoldstein = toneRows.length > 0
+          ? toneRows[toneRows.length - 1].avg_goldstein.toFixed(2)
+          : '—'
+
+        // media mentions: add up total_mentions across every daily row
+        const mediaRows = media as MediaRow[]
+        const mediaMentions = mediaRows
+          .reduce((sum, row) => sum + (row.total_mentions ?? 0), 0)
+          .toLocaleString()
+
+        setMetrics({ totalEvents, topActor, avgGoldstein, mediaMentions })
+      })
+      .catch(() => {
+        // on failures leave all values as dashes rather than crashing the page
+      })
+  }, [eventName])
+
+  return metrics
 }
  
 function buildSignalEndpoint(intent: QueryIntent, eventConfig: string): string {
@@ -213,6 +288,37 @@ function SavedGraphCard({
 // Page
 export default function DashboardPage() {
   const [periodType, setPeriodType] = useState<PeriodType>('weekly')
+
+  // call hook to get live values, showing dashes until data arrives
+  const metrics = useMetrics(EVENT_NAME)
+
+  // stats array built from live metric values
+  const stats = [
+    {
+      label: 'Total Events',
+      value: metrics.totalEvents,       // total from summary endpoint
+      icon: TrendingUp,
+      tooltip: 'Total GDELT events ingested for this conflict',
+    },
+    {
+      label: 'Top Actor',
+      value: metrics.topActor,          // most frequent actor name
+      icon: Users,
+      tooltip: 'Most frequently appearing actor across all ingested events',
+    },
+    {
+      label: 'Avg Goldstein Scale',
+      value: metrics.avgGoldstein,      // most recent weekly avg goldstein
+      icon: Activity,
+      tooltip: 'Most recent weekly average Goldstein scale: negative = hostile, positive = cooperative',
+    },
+    {
+      label: 'Media Mentions',
+      value: metrics.mediaMentions,     // sum of all daily mentions
+      icon: TrendingDown,
+      tooltip: 'Total media mentions across all ingested events',
+    },
+  ]
  
   return (
     <div className="space-y-6">

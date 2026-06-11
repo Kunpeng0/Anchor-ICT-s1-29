@@ -1,15 +1,14 @@
 import { LucideIcon } from "lucide-react"
 
+// stat card for metrics
 interface StatCardProps {
   label: string
   value: string
-  delta: number
   icon: LucideIcon
   tooltip?: string
 }
 
-export default function StatCard({ label, value, delta, icon: Icon, tooltip }: StatCardProps) {
-  const positive = delta >= 0
+export default function StatCard({ label, value, icon: Icon, tooltip }: StatCardProps) {
   return (
     <div className="card flex items-start justify-between">
       <div>
@@ -23,7 +22,7 @@ export default function StatCard({ label, value, delta, icon: Icon, tooltip }: S
               <div className="flex h-4 w-4 cursor-default items-center justify-center rounded-full border border-gray-300 text-[10px] text-gray-400 dark:border-gray-700 dark:text-gray-500">
                 ?
               </div>
-              {/* tooltop box hidden by default, visible on hover via group-hover */}
+              {/* tooltip box hidden by default, visible on hover via group-hover */}
               <div className="absolute left-1/2 top-5 z-10 hidden w-max -translate-x-1/2 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-500 shadow-sm group-hover:block dark:border-gray-700 dark:bg-gray-950 dark:text-gray-300">
                 {tooltip}
               </div>
@@ -32,11 +31,6 @@ export default function StatCard({ label, value, delta, icon: Icon, tooltip }: S
         </div>
 
         <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">{value}</p>
-        {delta !== undefined && (
-          <p className={`mt-1 text-xs font-medium ${positive ? 'text-emerald-600' : 'text-red-500'}`}>
-            {positive ? '▲' : '▼'} {Math.abs(delta)}% vs last month
-          </p>
-        )}
       </div>
       {Icon && (
         <div className="rounded-lg bg-brand-50 p-3 dark:bg-brand-900/30">
