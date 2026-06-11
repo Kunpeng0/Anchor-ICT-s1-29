@@ -194,6 +194,63 @@ def get_tone_over_time(
         conn.close()
 
 
+def get_conflict_phase(
+    event_name: str,
+    db_path: str = DB_PATH,
+) -> dict:
+    """
+    Return weekly conflict phase history and the latest trend metrics.
+
+    The response includes `rows` ordered by period ascending and a `current`
+    summary showing the latest phase and windowed changes in volume,
+    average Goldstein, and violent_share.
+    """
+    conn = _connect(db_path)
+    try:
+        cur = conn.execute(
+            """
+            SELECT period, event_count, avg_goldstein, violent_share, phase
+            FROM signals_conflict_phase
+            WHERE event_config = ?
+            ORDER BY period ASC
+            """,
+            (event_name,),
+        )
+        rows = [dict(row) for row in cur.fetchall()]
+
+        # Annotate with a permissive type so static analysis accepts mixed None/float values
+        current: dict[str, object] = {
+            "phase": None,
+            "volume_change": None,
+            "goldstein_change": None,
+            "violent_share_change": None,
+        }
+        if rows:
+            current["phase"] = rows[-1]["phase"]
+            if len(rows) >= 12:
+                recent = rows[-4:]
+                prior = rows[-12:-4]
+
+                recent_volume_mean = sum(r["event_count"] for r in recent) / len(recent)
+                prior_volume_mean = sum(r["event_count"] for r in prior) / len(prior)
+                recent_goldstein_mean = sum(r["avg_goldstein"] for r in recent if r["avg_goldstein"] is not None) / len(recent)
+                prior_goldstein_mean = sum(r["avg_goldstein"] for r in prior if r["avg_goldstein"] is not None) / len(prior)
+                recent_violent_share_mean = sum(r["violent_share"] for r in recent) / len(recent)
+                prior_violent_share_mean = sum(r["violent_share"] for r in prior) / len(prior)
+
+                volume_change = None
+                if prior_volume_mean != 0:
+                    volume_change = (recent_volume_mean - prior_volume_mean) / prior_volume_mean * 100
+
+                current["volume_change"] = volume_change
+                current["goldstein_change"] = recent_goldstein_mean - prior_goldstein_mean
+                current["violent_share_change"] = recent_violent_share_mean - prior_violent_share_mean
+
+        return {"rows": rows, "current": current}
+    finally:
+        conn.close()
+
+
 def get_media_attention(
     event_name: str,
     period_type: str = "daily",

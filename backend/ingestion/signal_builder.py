@@ -240,6 +240,95 @@ def build_tone_over_time(conn: sqlite3.Connection, df: pd.DataFrame, event_confi
     return upserted
 
 
+def build_conflict_phase(conn: sqlite3.Connection, df: pd.DataFrame, event_config: str) -> int:
+    """
+    Compute the composite conflict phase signal and write weekly rows to
+    `signals_conflict_phase`.
+
+    The phase label is derived from recent trends in volume, Goldstein and
+    violent share. It is computed on ISO week buckets and is intentionally
+    defensive: weeks with fewer than 12 prior weeks get
+    `insufficient_history` so the dashboard does not overreact to early data.
+    """
+    df_valid = df.dropna(subset=["event_date"]).copy()
+    df_valid["period"] = df_valid["event_date"].apply(_week_label)
+
+    # Compute weekly aggregates. Violent share counts only CAMEO roots 18/19/20.
+    df_valid["cameo_root"] = df_valid["cameo_code"].astype(str).str[:2]
+    df_valid["violent_event"] = df_valid["cameo_root"].isin(["18", "19", "20"]).astype(int)
+
+    grouped = df_valid.groupby("period").agg(
+        event_count=("period", "size"),
+        avg_goldstein=("goldstein_scale", "mean"),
+        violent_share=("violent_event", "mean"),
+    ).reset_index()
+
+    grouped = grouped.sort_values("period", ascending=True).reset_index(drop=True)
+
+    all_time_weekly_mean = grouped["event_count"].mean() if not grouped.empty else 0.0
+
+    upserted = 0
+    for idx in range(len(grouped)):
+        row = grouped.iloc[idx]
+        phase = "insufficient_history"
+
+        if idx >= 12:
+            recent = grouped.iloc[idx - 3 : idx + 1]
+            prior = grouped.iloc[idx - 11 : idx - 3]
+
+            recent_volume_mean = recent["event_count"].mean()
+            prior_volume_mean = prior["event_count"].mean()
+            recent_goldstein_mean = recent["avg_goldstein"].mean()
+            prior_goldstein_mean = prior["avg_goldstein"].mean()
+            recent_violent_share_mean = recent["violent_share"].mean()
+            prior_violent_share_mean = prior["violent_share"].mean()
+
+            volume_rising = recent_volume_mean >= 1.15 * prior_volume_mean
+            volume_falling = recent_volume_mean <= 0.85 * prior_volume_mean
+            goldstein_falling = recent_goldstein_mean <= prior_goldstein_mean - 0.5
+            goldstein_rising = recent_goldstein_mean >= prior_goldstein_mean + 0.5
+            violence_rising = recent_violent_share_mean >= prior_violent_share_mean + 0.05
+
+            if volume_rising and (goldstein_falling or violence_rising):
+                phase = "escalation"
+            elif volume_falling and goldstein_rising:
+                phase = "de_escalation"
+            elif recent_volume_mean < 0.25 * all_time_weekly_mean:
+                phase = "low_intensity"
+            else:
+                phase = "sustained"
+
+        conn.execute(
+            """
+            INSERT INTO signals_conflict_phase (
+                event_config, period, event_count, avg_goldstein,
+                violent_share, phase, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(event_config, period)
+            DO UPDATE SET
+                event_count = excluded.event_count,
+                avg_goldstein = excluded.avg_goldstein,
+                violent_share = excluded.violent_share,
+                phase = excluded.phase,
+                updated_at = excluded.updated_at
+            """,
+            (
+                event_config,
+                row["period"],
+                int(row["event_count"]),
+                float(row["avg_goldstein"]) if pd.notna(row["avg_goldstein"]) else None,
+                float(row["violent_share"]),
+                phase,
+            ),
+        )
+        upserted += 1
+
+    conn.commit()
+    logger.info(f"[signal_builder] conflict_phase: {upserted} rows upserted")
+    return upserted
+
+
 def build_actor_location_graph(conn: sqlite3.Connection, df: pd.DataFrame, event_config: str) -> int:
     """
     Build actor-location edge weights for the network graph signal.
@@ -305,6 +394,7 @@ def build_all_signals(event_name: str, db_path: str = DB_PATH) -> dict:
             "location_frequency":   build_location_frequency(conn, df, event_name),
             "tone_over_time":       build_tone_over_time(conn, df, event_name),
             "actor_location_graph": build_actor_location_graph(conn, df, event_name),
+            "conflict_phase": build_conflict_phase(conn, df, event_name),
         }
 
         logger.info(f"[signal_builder] All signals built: {results}")
