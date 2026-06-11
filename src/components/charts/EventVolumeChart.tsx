@@ -129,6 +129,12 @@ return (
           },
           showlegend: false,
           hovermode: 'x unified', // snaps hover tooltip to the nearest x value across all traces
+          // make hover label more readable with only some transparency
+          hoverlabel: {
+            bgcolor: 'rgba(15, 23, 42, 0.85)',
+            bordercolor: '#334155',
+            font: { size: 12, color: '#f1f5f9', family: 'Inter, system-ui, sans-serif' },
+          },
         }}
         config={{ responsive: true, displayModeBar: false }}
         useResizeHandler
