@@ -136,7 +136,8 @@ function SavedGraphsPanel() {
   const [graphs, setGraphs] = useState<ResolvedGraph[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
- 
+  
+  // Load saved graph from backend and resolve their chart data
   const fetchGraphs = async () => {
     setLoading(true)
     setError(null)
@@ -144,19 +145,21 @@ function SavedGraphsPanel() {
       // 1. Fetch the saved graph rows
       const rows = await callApi(`/graphs/${EVENT_NAME}?include_hidden=false`) as SavedGraphRow[]
  
-      // 2. For each row, parse intent and fetch the signal data
+      // 2. fetch the data needed to render each saved graph
       const resolved = await Promise.all(
         rows.map(async (row) => {
           const parsed = typeof row.intent_json === 'string'
             ? JSON.parse(row.intent_json)
             : row.intent_json
- 
+          
+          // Convert stored JSON into the QueryIntent needed to determine which signal endpoint to call
           const intent: QueryIntent = {
             chart_type: parsed.chart_type ?? parsed.type ?? '',
             signal:     parsed.signal ?? parsed.type ?? '',
             params:     parsed.params ?? {},
           }
- 
+          
+          //Build the correct API endpoint for this graph's signal and fetch the data to be charted
           const endpoint = buildSignalEndpoint(intent, row.event_config)
           if (!endpoint) throw new Error(`Unknown signal: "${intent.signal}"`)
  
@@ -172,9 +175,11 @@ function SavedGraphsPanel() {
       setLoading(false)
     }
   }
- 
+  
+  //Load graphs when the component first renders
   useEffect(() => { fetchGraphs() }, [])
- 
+  
+  // Delete graph and remove it from the UI
   const handleDelete = async (id: number) => {
     try {
       await fetch(`${BASE_URL}/graphs/${id}`, { method: 'DELETE' })
@@ -245,6 +250,7 @@ function SavedGraphCard({
   graph: ResolvedGraph
   onDelete: (id: number) => void
 }) {
+  // Format the creation date for display in the card footer
   const formattedDate = graph.created_at
     ? new Date(graph.created_at).toLocaleDateString(undefined, {
         month: 'short', day: 'numeric', year: 'numeric',

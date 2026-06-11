@@ -169,16 +169,18 @@ function ChartActionButton({ label, icon: Icon, onClick, disabled, active }: Cha
   )
 }
 
-
+// Save button that updates its icon and style based on the current save state (idle, saving, saved)
 function SaveButton({ state, onSave }: { state: 'idle' | 'saving' | 'saved'; onSave: () => void }) {
+  // Set button text based on the current save state
   const label = state === 'saved' ? 'Saved!' : state === 'saving' ? 'Saving…' : 'Save graph'
   return (
     <button
       type="button"
       onClick={onSave}
-      disabled={state !== 'idle'}
+      disabled={state !== 'idle'} //Prevent multiple clicks while saving
       title={label}
       aria-label={label}
+      //Changed button colour based on save state
       className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border shadow-sm transition disabled:cursor-not-allowed
         ${state === 'saved'
           ? 'border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-400'
