@@ -362,6 +362,134 @@ function StreamingPlaceholder() {
   )
 }
 
+// Minimal Plotly line used as a row sparkline inside SummaryTimeline.
+function Sparkline({ rows, yKey, color }: { rows: Record<string, unknown>[]; yKey: string; color: string }) {
+  if (rows.length === 0) {
+    return <div className="h-[72px] animate-pulse rounded bg-gray-100 dark:bg-gray-800" />
+  }
+  return (
+    <div className="h-[72px]">
+      <Plot
+        data={[{
+          x: rows.map((r) => formatPeriodLabel(r.period)),
+          y: rows.map((r) => Number(r[yKey] ?? 0)),
+          type: 'scatter',
+          mode: 'lines',
+          line: { color, width: 2 },
+          hovertemplate: '%{x}: %{y}<extra></extra>',
+        }]}
+        layout={{
+          autosize: true,
+          margin: { t: 4, r: 4, b: 4, l: 4 },
+          paper_bgcolor: 'transparent',
+          plot_bgcolor: 'transparent',
+          xaxis: { visible: false },
+          yaxis: { visible: false },
+          showlegend: false,
+          hovermode: 'x',
+        }}
+        config={{ responsive: true, displayModeBar: false }}
+        useResizeHandler
+        style={{ width: '100%', height: '100%' }}
+      />
+    </div>
+  )
+}
+
+// Computes 4-week-over-prior-4-week delta and percentage for a given numeric key.
+function computeTrend(rows: Record<string, unknown>[], key: string) {
+  if (rows.length < 8) return { delta: 0, pct: 0 }
+  const vals = rows.slice(-8).map((r) => Number(r[key] ?? 0))
+  const prior  = vals.slice(0, 4).reduce((a, b) => a + b, 0) / 4
+  const recent = vals.slice(4).reduce((a, b) => a + b, 0) / 4
+  const delta = recent - prior
+  const pct = prior !== 0 ? (delta / Math.abs(prior)) * 100 : 0
+  return { delta, pct }
+}
+
+// Stacks three sparklines (event volume, tone, media) with a verdict banner.
+// All signal data is fetched client-side; the LLM is bypassed for this chart type.
+// Verdict is a simple heuristic: volume down + tone up = Improving, volume up + tone down = Escalating.
+function SummaryTimeline({ eventName, embedded }: { eventName: string; embedded?: boolean }) {
+  const [eventVol, setEventVol] = useState<Record<string, unknown>[]>([])
+  const [tone,     setTone]     = useState<Record<string, unknown>[]>([])
+  const [media,    setMedia]    = useState<Record<string, unknown>[]>([])
+
+  useEffect(() => {
+    const get = (url: string, set: (d: Record<string, unknown>[]) => void) => {
+      fetch(url)
+        .then((r) => r.json() as Promise<unknown>)
+        .then((d) => set(Array.isArray(d) ? (d as Record<string, unknown>[]) : []))
+        .catch(() => {})
+    }
+    get(`/signals/${eventName}/event-volume?period_type=weekly`,    setEventVol)
+    get(`/signals/${eventName}/tone-over-time?period_type=weekly`,  setTone)
+    get(`/signals/${eventName}/media-attention?period_type=weekly`, setMedia)
+  }, [eventName])
+
+  const volTrend   = computeTrend(eventVol, 'event_count')
+  const toneTrend  = computeTrend(tone,     'avg_goldstein')
+  const mediaTrend = computeTrend(media,    'total_mentions')
+
+  // Goldstein scale: higher = more cooperative, lower = more hostile — so tone rising is good.
+  let verdict     = 'Ongoing / Unclear'
+  let verdictBg   = 'bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800'
+  let verdictText = 'text-amber-700 dark:text-amber-400'
+  if (volTrend.delta < 0 && toneTrend.delta > 0) {
+    verdict = 'Improving'
+    verdictBg   = 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800'
+    verdictText = 'text-emerald-700 dark:text-emerald-400'
+  } else if (volTrend.delta > 0 && toneTrend.delta < 0) {
+    verdict = 'Escalating'
+    verdictBg   = 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800'
+    verdictText = 'text-red-700 dark:text-red-400'
+  }
+
+  const TrendBadge = ({ pct, positiveIsGood }: { pct: number; positiveIsGood: boolean }) => {
+    const up = pct >= 0
+    const good = up === positiveIsGood
+    return (
+      <span className={`text-xs font-semibold ${good ? 'text-emerald-600' : 'text-red-500'}`}>
+        {up ? '↑' : '↓'} {Math.abs(pct).toFixed(0)}%
+      </span>
+    )
+  }
+
+  const rows = [
+    { label: 'Event Volume',   data: eventVol, yKey: 'event_count',    color: '#4c6ef5', trend: volTrend,   positiveIsGood: false },
+    { label: 'Conflict Tone',  data: tone,     yKey: 'avg_goldstein',  color: '#f59e0b', trend: toneTrend,  positiveIsGood: true  },
+    { label: 'Media Attention',data: media,    yKey: 'total_mentions', color: '#10b981', trend: mediaTrend, positiveIsGood: false },
+  ]
+
+  const loading = eventVol.length === 0 && tone.length === 0 && media.length === 0
+  if (loading) return <StreamingPlaceholder />
+
+  return (
+    <div className={`space-y-3 ${embedded ? '' : 'pt-1'}`}>
+      <div className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${verdictBg}`}>
+        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Overall assessment</span>
+        <span className={`text-sm font-bold ${verdictText}`}>{verdict}</span>
+        <span className="ml-auto text-[11px] text-gray-400">last 4 weeks vs prior 4 weeks</span>
+      </div>
+      <div className="space-y-2">
+        {rows.map(({ label, data, yKey, color, trend, positiveIsGood }) => (
+          <div key={label} className="flex items-center gap-4 rounded-lg border border-gray-100 bg-white/60 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/50">
+            <div className="w-36 shrink-0">
+              <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">{label}</p>
+              <div className="mt-0.5">
+                <TrendBadge pct={trend.pct} positiveIsGood={positiveIsGood} />
+              </div>
+            </div>
+            <div className="flex-1">
+              <Sparkline rows={data.slice(-52)} yKey={yKey} color={color} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function ResultTable({ rows }: { rows: Record<string, unknown>[] }) {
   if (rows.length === 0) return <EmptyState />
 
@@ -480,6 +608,366 @@ function LineChart({
         </div>
       )}
     </>
+  )
+}
+
+// Overlays media attention (total_mentions) and event volume (event_count) on a dual y-axis chart.
+// The LLM only returns one signal per response, so event_volume is fetched here directly
+// from the signals endpoint using the same period_type the LLM chose for media_attention.
+function DualLineChart({
+  mediaRows,
+  eventName,
+  periodType,
+  fileName,
+  embedded,
+}: {
+  mediaRows: Record<string, unknown>[]
+  eventName: string
+  periodType: string
+  fileName: string
+  embedded?: boolean
+}) {
+  const [eventRows, setEventRows] = useState<Record<string, unknown>[]>([])
+
+  useEffect(() => {
+    fetch(`/signals/${eventName}/event-volume?period_type=${periodType}`)
+      .then((r) => r.json() as Promise<unknown>)
+      .then((d) => setEventRows(Array.isArray(d) ? (d as Record<string, unknown>[]) : []))
+      .catch(() => {})
+  }, [eventName, periodType])
+
+  if (mediaRows.length === 0 && eventRows.length === 0) return <EmptyState />
+
+  const plotTheme = getPlotTheme()
+
+  return (
+    <div className={`query-plot-frame ${embedded ? 'h-[220px]' : 'h-[360px]'}`}>
+      <Plot
+        data={[
+          {
+            x: eventRows.map((r) => formatPeriodLabel(r.period)),
+            y: eventRows.map((r) => Number(r.event_count ?? 0)),
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Events',
+            line: { color: '#4c6ef5', width: 2.5 },
+            fill: 'tozeroy',
+            fillcolor: plotTheme.fillColor,
+            yaxis: 'y',
+            hovertemplate: '%{x}<br>Events: %{y}<extra></extra>',
+          },
+          {
+            x: mediaRows.map((r) => formatPeriodLabel(r.period)),
+            y: mediaRows.map((r) => Number(r.total_mentions ?? 0)),
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Mentions',
+            line: { color: '#f59e0b', width: 2.5 },
+            yaxis: 'y2',
+            hovertemplate: '%{x}<br>Mentions: %{y}<extra></extra>',
+          },
+        ]}
+        layout={{
+          autosize: true,
+          margin: { t: 12, r: 80, b: 56, l: 72 },
+          paper_bgcolor: 'transparent',
+          plot_bgcolor: 'transparent',
+          font: { family: 'Inter, system-ui, sans-serif', size: 13, color: plotTheme.labelColor },
+          xaxis: {
+            automargin: true,
+            nticks: 7,
+            showgrid: false,
+            tickangle: 0,
+            tickfont: { size: 12, color: plotTheme.axisColor },
+            zeroline: false,
+          },
+          yaxis: {
+            automargin: true,
+            showgrid: true,
+            gridcolor: plotTheme.gridColor,
+            zeroline: false,
+            tickfont: { size: 12, color: plotTheme.axisColor },
+            title: { text: 'Events', font: { size: 12, color: '#4c6ef5' }, standoff: 12 },
+          },
+          yaxis2: {
+            automargin: true,
+            overlaying: 'y',
+            side: 'right',
+            showgrid: false,
+            zeroline: false,
+            tickfont: { size: 12, color: plotTheme.axisColor },
+            title: { text: 'Mentions', font: { size: 12, color: '#f59e0b' }, standoff: 12 },
+          },
+          legend: { x: 0.01, y: 0.99, bgcolor: 'transparent', font: { size: 11 } },
+          showlegend: true,
+          hovermode: 'x unified',
+        }}
+        config={{ responsive: true, displayModeBar: false }}
+        useResizeHandler
+        style={{ width: '100%', height: '100%' }}
+      />
+    </div>
+  )
+}
+
+// Renders actor-location edges with a client-side actor filter.
+// The actor_location_graph signal has no actor param — it always returns all edges —
+// so filtering happens here in the browser rather than via a new backend query.
+function ActorLocationTable({ edges }: { edges: Record<string, unknown>[] }) {
+  const [filter, setFilter] = useState('')
+
+  // Unique sorted actor list drives the placeholder count in the search input.
+  const actors = useMemo(
+    () => [...new Set(edges.map((e) => String(e.source ?? '')))].sort(),
+    [edges],
+  )
+
+  const filtered = useMemo(() => {
+    const q = filter.trim().toLowerCase()
+    return edges
+      .filter((e) => !q || String(e.source ?? '').toLowerCase().includes(q))
+      .sort((a, b) => Number(b.weight ?? 0) - Number(a.weight ?? 0))
+  }, [edges, filter])
+
+  if (edges.length === 0) return <EmptyState />
+
+  return (
+    <div className="space-y-3">
+      <input
+        type="text"
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        placeholder={`Filter by actor — ${actors.length} actors total`}
+        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:placeholder-gray-500"
+      />
+      <div className="max-h-72 overflow-auto rounded-lg border border-gray-200 dark:border-gray-800">
+        <table className="min-w-full divide-y divide-gray-200 text-left text-xs dark:divide-gray-800">
+          <thead className="sticky top-0 bg-gray-50 text-gray-500 dark:bg-gray-950 dark:text-gray-400">
+            <tr>
+              <th className="px-3 py-2 font-semibold">Actor</th>
+              <th className="px-3 py-2 font-semibold">Location</th>
+              <th className="px-3 py-2 font-semibold text-right">Activity</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 bg-white text-gray-700 dark:divide-gray-800 dark:bg-gray-900 dark:text-gray-300">
+            {filtered.slice(0, 50).map((row, i) => (
+              <tr key={i}>
+                <td className="max-w-[180px] truncate px-3 py-2">{String(row.source ?? '')}</td>
+                <td className="max-w-[180px] truncate px-3 py-2">{String(row.target ?? '')}</td>
+                <td className="px-3 py-2 text-right font-medium">{String(row.weight ?? '')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {filtered.length > 50 && (
+        <p className="text-right text-xs text-gray-400">Showing 50 of {filtered.length} rows</p>
+      )}
+    </div>
+  )
+}
+
+// Computes a simple rolling average over a sliding window of the given size.
+function rollingAvg(values: number[], window: number): number[] {
+  return values.map((_, i) => {
+    const slice = values.slice(Math.max(0, i - window + 1), i + 1)
+    return slice.reduce((a, b) => a + b, 0) / slice.length
+  })
+}
+
+// Renders tone_over_time as a line chart with a 4-week rolling average overlay and
+// anomaly annotations. Points more than 1 SD from the overall mean are flagged in red,
+// providing a partial answer to Q17 (unusually violent weeks) without a new backend signal.
+function AnnotatedLineChart({
+  rows,
+  yKey,
+  yLabel,
+  fileName,
+  title,
+  embedded,
+}: {
+  rows: Record<string, unknown>[]
+  yKey: string
+  yLabel: string
+  fileName: string
+  title: string
+  embedded?: boolean
+}) {
+  if (rows.length === 0) return <EmptyState />
+
+  const plotTheme = getPlotTheme()
+  const xValues = rows.map((r) => formatPeriodLabel(r.period))
+  const yValues = rows.map((r) => Number(r[yKey] ?? 0))
+
+  const mean = yValues.reduce((a, b) => a + b, 0) / yValues.length
+  const sd = Math.sqrt(yValues.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / yValues.length)
+  const rolling = rollingAvg(yValues, 4)
+
+  const annotations = yValues
+    .map((v, i) => (Math.abs(v - mean) > sd ? i : -1))
+    .filter((i) => i !== -1)
+    .map((i) => ({
+      x: xValues[i],
+      y: yValues[i],
+      text: yValues[i].toFixed(1),
+      showarrow: true,
+      arrowhead: 2,
+      arrowsize: 0.8,
+      arrowcolor: '#ef4444',
+      font: { size: 10, color: '#ef4444' },
+      bgcolor: 'rgba(254,242,242,0.9)',
+      bordercolor: '#ef4444',
+      borderwidth: 1,
+    }))
+
+  return (
+    <div className={`query-plot-frame ${embedded ? 'h-[220px]' : 'h-[360px]'}`}>
+      <Plot
+        data={[
+          {
+            x: xValues,
+            y: yValues,
+            type: 'scatter',
+            mode: rows.length <= 26 ? 'lines+markers' : 'lines',
+            name: yLabel,
+            line: { color: '#4c6ef5', width: 2.5 },
+            marker: { color: '#4c6ef5', size: 5 },
+            fill: 'tozeroy',
+            fillcolor: plotTheme.fillColor,
+            hovertemplate: `%{x}<br>${yLabel}: %{y}<extra></extra>`,
+          },
+          {
+            x: xValues,
+            y: rolling,
+            type: 'scatter',
+            mode: 'lines',
+            name: '4-week avg',
+            line: { color: '#9ca3af', width: 1.5, dash: 'dash' },
+            hovertemplate: '%{x}<br>4-week avg: %{y:.2f}<extra></extra>',
+          },
+        ]}
+        layout={{
+          autosize: true,
+          margin: { t: 12, r: 24, b: 56, l: 96 },
+          paper_bgcolor: 'transparent',
+          plot_bgcolor: 'transparent',
+          font: { family: 'Inter, system-ui, sans-serif', size: 13, color: plotTheme.labelColor },
+          xaxis: {
+            automargin: true,
+            nticks: 7,
+            showgrid: false,
+            tickangle: 0,
+            tickfont: { size: 12, color: plotTheme.axisColor },
+            zeroline: false,
+          },
+          yaxis: {
+            automargin: true,
+            showgrid: true,
+            gridcolor: plotTheme.gridColor,
+            zeroline: false,
+            tickfont: { size: 12, color: plotTheme.axisColor },
+            title: { text: yLabel, font: { size: 12, color: plotTheme.axisColor }, standoff: 12 },
+          },
+          annotations,
+          legend: { x: 0.01, y: 0.99, bgcolor: 'transparent', font: { size: 11 } },
+          showlegend: true,
+          hovermode: 'x unified',
+        }}
+        config={{ responsive: true, displayModeBar: false }}
+        useResizeHandler
+        style={{ width: '100%', height: '100%' }}
+      />
+    </div>
+  )
+}
+
+// Scatter plot of actor activity (event_count) vs geographic reach (sum of edge_weights
+// from actor_location_graph). Fetches actor_location_graph client-side to derive the
+// second dimension since actor_frequency only contains event counts.
+// Provides a partial answer to Q11 (active + widespread actors) without a new backend signal.
+// Only shown when the LLM returns chart_type "scatter" for the actor_frequency signal.
+function ActorActivityScatter({
+  rows,
+  eventName,
+  fileName,
+  title,
+  embedded,
+}: {
+  rows: Record<string, unknown>[]
+  eventName: string
+  fileName: string
+  title: string
+  embedded?: boolean
+}) {
+  const [reachByActor, setReachByActor] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    fetch(`/signals/${eventName}/actor-location-graph`)
+      .then((r) => r.json() as Promise<{ edges?: { source: string; weight: number }[] }>)
+      .then((d) => {
+        // Sum edge weights per actor to get a geographic reach score.
+        const totals: Record<string, number> = {}
+        for (const edge of d.edges ?? []) {
+          totals[edge.source] = (totals[edge.source] ?? 0) + edge.weight
+        }
+        setReachByActor(totals)
+      })
+      .catch(() => {})
+  }, [eventName])
+
+  if (rows.length === 0) return <EmptyState />
+
+  const plotTheme = getPlotTheme()
+  const actors = rows.map((r) => String(r.actor ?? ''))
+  const activity = rows.map((r) => Number(r.event_count ?? 0))
+  const reach = actors.map((a) => reachByActor[a] ?? 0)
+
+  return (
+    <div className={`query-plot-frame ${embedded ? 'h-[220px]' : 'h-[360px]'}`}>
+      <Plot
+        data={[
+          {
+            x: reach,
+            y: activity,
+            text: actors,
+            type: 'scatter',
+            mode: 'markers+text',
+            textposition: 'top center',
+            textfont: { size: 10, color: plotTheme.labelColor },
+            marker: { color: '#4c6ef5', size: 9, opacity: 0.8 },
+            hovertemplate: '<b>%{text}</b><br>Activity: %{y}<br>Geographic reach: %{x}<extra></extra>',
+          },
+        ]}
+        layout={{
+          autosize: true,
+          margin: { t: 12, r: 24, b: 64, l: 72 },
+          paper_bgcolor: 'transparent',
+          plot_bgcolor: 'transparent',
+          font: { family: 'Inter, system-ui, sans-serif', size: 13, color: plotTheme.labelColor },
+          xaxis: {
+            automargin: true,
+            showgrid: true,
+            gridcolor: plotTheme.gridColor,
+            zeroline: false,
+            tickfont: { size: 12, color: plotTheme.axisColor },
+            title: { text: 'Geographic reach (total edge weight)', font: { size: 12, color: plotTheme.axisColor }, standoff: 12 },
+          },
+          yaxis: {
+            automargin: true,
+            showgrid: true,
+            gridcolor: plotTheme.gridColor,
+            zeroline: false,
+            tickfont: { size: 12, color: plotTheme.axisColor },
+            title: { text: 'Event count', font: { size: 12, color: plotTheme.axisColor }, standoff: 12 },
+          },
+          showlegend: false,
+          hovermode: 'closest',
+        }}
+        config={{ responsive: true, displayModeBar: false }}
+        useResizeHandler
+        style={{ width: '100%', height: '100%' }}
+      />
+    </div>
   )
 }
 
@@ -644,14 +1132,29 @@ export default function QueryResultChart({ intent, data, embedded = false, event
 
   let content
   // Route each backend signal to the chart shape users expect; list-like results stay as tables.
+  // summary chart_type bypasses signal routing entirely — SummaryTimeline fetches its own data.
   if (isStreaming && streamedRows.length === 0) {
     content = <StreamingPlaceholder />
+  } else if (intent.chart_type === 'summary') {
+    content = <SummaryTimeline eventName={eventName ?? 'sudan_2023'} embedded={embedded} />
   } else if (intent.signal === 'event_volume') {
     content = <LineChart rows={streamedRows} yKey="event_count" yLabel="Events" fileName={pngFileName} title={chartTitle} embedded={embedded} />
   } else if (intent.signal === 'tone_over_time') {
-    content = <LineChart rows={streamedRows} yKey="avg_goldstein" yLabel="Avg Goldstein" fileName={pngFileName} title={chartTitle} embedded={embedded} />
+    content = <AnnotatedLineChart rows={streamedRows} yKey="avg_goldstein" yLabel="Avg Goldstein" fileName={pngFileName} title={chartTitle} embedded={embedded} />
+  } else if (intent.signal === 'media_attention' && intent.chart_type === 'dual_line') {
+    content = (
+      <DualLineChart
+        mediaRows={streamedRows}
+        eventName={eventName ?? 'sudan_2023'}
+        periodType={String(intent.params.period_type ?? 'weekly')}
+        fileName={pngFileName}
+        embedded={embedded}
+      />
+    )
   } else if (intent.signal === 'media_attention') {
     content = <LineChart rows={streamedRows} yKey="total_mentions" yLabel="Mentions" fileName={pngFileName} title={chartTitle} embedded={embedded} />
+  } else if (intent.signal === 'actor_frequency' && intent.chart_type === 'scatter') {
+    content = <ActorActivityScatter rows={streamedRows} eventName={eventName ?? 'sudan_2023'} fileName={pngFileName} title={chartTitle} embedded={embedded} />
   } else if (intent.signal === 'actor_frequency') {
     content = <BarChart rows={streamedRows} labelKey="actor" valueKey="event_count" fileName={pngFileName} title={chartTitle} embedded={embedded} />
   } else if (intent.signal === 'location_frequency') {
@@ -659,7 +1162,7 @@ export default function QueryResultChart({ intent, data, embedded = false, event
   } else if (intent.signal === 'event_type') {
     content = <EventTypeChart rows={streamedRows} fileName={pngFileName} title={chartTitle} embedded={embedded} />
   } else if (intent.signal === 'actor_location_graph' && isGraphData(data)) {
-    content = <ResultTable rows={streamedRows} />
+    content = <ActorLocationTable edges={(data as { edges: Record<string, unknown>[] }).edges} />
   } else {
     content = <ResultTable rows={streamedRows} />
   }
