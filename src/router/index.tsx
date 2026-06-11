@@ -6,6 +6,7 @@ import ReportsPage from '@/pages/dashboard/ReportsPage'
 import SettingsPage from '@/pages/dashboard/SettingsPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import BackendTestPage from '@/pages/dashboard/BackendTestPage'
+import ConflictPhasePage from '@/pages/dashboard/ConflictPhasePage'
 
 export const router = createBrowserRouter([
   {
@@ -21,6 +22,7 @@ export const router = createBrowserRouter([
       { path: 'reports', element: <ReportsPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'backend-test', element: <BackendTestPage /> },
+      { path: 'conflict-phase', element: <ConflictPhasePage /> },
     ],
   },
   {

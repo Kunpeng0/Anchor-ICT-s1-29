@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { ArrowUp, Bot, ChevronDown, ChevronRight, User2 } from 'lucide-react'
 import QueryResultChart from '@/components/charts/QueryResultChart'
 import { LlmModel, getLlmModelLabel, getStoredLlmModel } from '@/lib/llmModels'
@@ -193,7 +194,20 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
           {isAssistant ? 'Anchor AI' : 'You'}
         </p>
-        {message.content && <div className="whitespace-pre-wrap">{message.content}</div>}
+        {message.content && message.content !== 'summary_redirect' && (
+          <div className="whitespace-pre-wrap">{message.content}</div>
+        )}
+        {message.content === 'summary_redirect' && (
+          <div>
+            <p className="mb-3">For a full conflict phase analysis, see the Conflict Status page.</p>
+            <Link
+              to="/dashboard/conflict-phase"
+              className="inline-flex items-center gap-1.5 rounded-full bg-brand-600 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-brand-700"
+            >
+              Open Conflict Status →
+            </Link>
+          </div>
+        )}
 
         {isAssistant && message.result && (
           <>
@@ -299,19 +313,12 @@ export default function InsightsPage() {
     setIsThinking(true)
 
     try {
-      // Summary queries bypass the LLM entirely — SummaryTimeline fetches all signals itself.
+      // Summary/phase queries go to the dedicated Conflict Status page rather than the LLM.
       if (isSummaryQuery(trimmed)) {
         const assistantMessage: ChatMessage = {
           id: nextIdRef.current++,
           role: 'assistant',
-          content: '',
-          result: {
-            query: trimmed,
-            event_name: EVENT_NAME,
-            model: 'client-side',
-            intent: { chart_type: 'summary', signal: 'event_volume', params: {} },
-            data: [],
-          },
+          content: 'summary_redirect',
         }
         setMessages((current) => [...current, assistantMessage])
         return

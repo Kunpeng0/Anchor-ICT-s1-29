@@ -17,6 +17,9 @@
 #   ignoring null Goldstein values.
 # - `build_actor_location_graph`: emits actor-location edges with weights
 #   and skips null actor/location pairs.
+# - `build_conflict_phase`: classifies each week into a conflict phase
+#   (escalation, de_escalation, stable, insufficient_history) based on
+#   windowed volume, Goldstein, and violent share comparisons.
 
 import sqlite3
 import sys
@@ -34,6 +37,7 @@ from backend.ingestion.signal_builder import (
     build_location_frequency,
     build_tone_over_time,
     build_actor_location_graph,
+    build_conflict_phase,
     build_all_signals,
     _week_label,
     _load_events,
@@ -124,6 +128,18 @@ def make_test_db() -> sqlite3.Connection:
             updated_at   TEXT DEFAULT (datetime('now')),
             UNIQUE(event_config, actor, location)
         );
+
+        CREATE TABLE IF NOT EXISTS signals_conflict_phase (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_config  TEXT NOT NULL,
+            period        TEXT NOT NULL,
+            event_count   INTEGER NOT NULL,
+            avg_goldstein REAL,
+            violent_share REAL,
+            phase         TEXT NOT NULL,
+            updated_at    TEXT DEFAULT (datetime('now')),
+            UNIQUE(event_config, period)
+        );
     """)
     return conn
 
@@ -147,6 +163,35 @@ def make_test_df() -> pd.DataFrame:
         "num_mentions":    [3,        5,         2,       8,       1],
         "source_url":      [f"http://example.com/{i}" for i in range(5)],
     })
+
+
+def make_conflict_phase_df(weekly_specs):
+    """
+    Build a synthetic DataFrame with one event per row for each weekly bucket.
+
+    weekly_specs is a list of (volume, goldstein, violent_share) tuples. Each
+    tuple produces `volume` rows all sharing the same event_date, Goldstein score,
+    and a mix of violent (CAMEO 18x) and non-violent (CAMEO 14x) codes derived
+    from violent_share. Used to produce controlled input for build_conflict_phase.
+    """
+    rows = []
+    start_date = pd.Timestamp("2025-01-05")
+    for week_index, (volume, goldstein, violent_share) in enumerate(weekly_specs):
+        event_date = start_date + pd.Timedelta(days=7 * week_index)
+        violent_count = int(round(volume * violent_share))
+        for row_index in range(volume):
+            rows.append({
+                "event_date": event_date,
+                "cameo_code": "180" if row_index < violent_count else "140",
+                "actor1": "ActorA",
+                "actor2": "ActorB",
+                "country": "SU",
+                "location": "Khartoum",
+                "goldstein_scale": goldstein,
+                "num_mentions": 1,
+                "source_url": f"http://example.com/{week_index}/{row_index}",
+            })
+    return pd.DataFrame(rows)
 
 
 # ---------------------------------------------------------------------------
@@ -396,6 +441,72 @@ def test_tone_over_time_skips_null_goldstein():
 
 
 # ---------------------------------------------------------------------------
+# Tests — build_conflict_phase
+# ---------------------------------------------------------------------------
+
+def test_conflict_phase_classifies_escalation():
+    conn = make_test_db()
+    # First 12 weeks are stable; final weeks show rising volume and lower Goldstein.
+    weekly_specs = [
+        (10, -1.0, 0.25),
+    ] * 12 + [
+        (12, -1.6, 0.25),
+        (13, -1.7, 0.25),
+        (14, -1.8, 0.30),
+        (15, -1.9, 0.35),
+    ]
+    df = make_conflict_phase_df(weekly_specs)
+    build_conflict_phase(conn, df, "sudan_2023")
+
+    cur = conn.cursor()
+    cur.execute("SELECT phase, violent_share FROM signals_conflict_phase ORDER BY period DESC LIMIT 1")
+    phase, violent_share = cur.fetchone()
+    assert phase == "escalation", f"Expected escalation, got {phase}"
+    assert violent_share >= 0.33, f"Expected violent share computed from 18/19/20 codes, got {violent_share}"
+    conn.close()
+    print(f"  PASS — build_conflict_phase() escalation classification with violent_share={violent_share}")
+
+
+def test_conflict_phase_classifies_de_escalation():
+    conn = make_test_db()
+    # First 12 weeks are high-intensity; final weeks show falling volume and improving Goldstein.
+    weekly_specs = [
+        (20, -3.0, 0.30),
+    ] * 12 + [
+        (16, -2.0, 0.30),
+        (15, -1.5, 0.30),
+        (14, -1.0, 0.30),
+        (13, -0.5, 0.30),
+    ]
+    df = make_conflict_phase_df(weekly_specs)
+    build_conflict_phase(conn, df, "sudan_2023")
+
+    cur = conn.cursor()
+    cur.execute("SELECT phase FROM signals_conflict_phase ORDER BY period DESC LIMIT 1")
+    phase = cur.fetchone()[0]
+    assert phase == "de_escalation", f"Expected de_escalation, got {phase}"
+    conn.close()
+    print(f"  PASS — build_conflict_phase() de_escalation classification")
+
+
+def test_conflict_phase_insufficient_history():
+    conn = make_test_db()
+    # Only 11 weeks — below the 12-week minimum required for trend comparison.
+    weekly_specs = [
+        (10, -1.0, 0.20),
+    ] * 11
+    df = make_conflict_phase_df(weekly_specs)
+    build_conflict_phase(conn, df, "sudan_2023")
+
+    cur = conn.cursor()
+    cur.execute("SELECT DISTINCT phase FROM signals_conflict_phase")
+    phases = {row[0] for row in cur.fetchall()}
+    assert phases == {"insufficient_history"}, f"Expected only insufficient_history phases, got {phases}"
+    conn.close()
+    print(f"  PASS — build_conflict_phase() insufficient history classification on short series")
+
+
+# ---------------------------------------------------------------------------
 # Tests — build_actor_location_graph
 # ---------------------------------------------------------------------------
 
@@ -442,7 +553,8 @@ def test_build_all_signals_returns_dict():
     assert isinstance(results, dict)
     expected_keys = {
         "event_volume", "event_type", "actor_frequency",
-        "location_frequency", "tone_over_time", "actor_location_graph"
+        "location_frequency", "tone_over_time", "actor_location_graph",
+        "conflict_phase",
     }
     assert expected_keys == set(results.keys()), f"Missing keys: {expected_keys - set(results.keys())}"
     for key, val in results.items():
@@ -471,6 +583,9 @@ if __name__ == "__main__":
         test_location_frequency_correct_counts,
         test_tone_over_time_avg_correct,
         test_tone_over_time_skips_null_goldstein,
+        test_conflict_phase_classifies_escalation,
+        test_conflict_phase_classifies_de_escalation,
+        test_conflict_phase_insufficient_history,
         test_actor_location_graph_skips_null_actor_or_location,
         test_actor_location_graph_edge_weights,
     ]

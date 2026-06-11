@@ -931,7 +931,7 @@ function ActorActivityScatter({
             y: activity,
             text: actors,
             type: 'scatter',
-            mode: 'markers+text',
+            mode: 'text+markers',
             textposition: 'top center',
             textfont: { size: 10, color: plotTheme.labelColor },
             marker: { color: '#4c6ef5', size: 9, opacity: 0.8 },

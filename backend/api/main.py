@@ -28,6 +28,7 @@ from backend.db.db import (
     get_graph_ratings,
     get_location_frequency,
     get_media_attention,
+    get_conflict_phase,
     get_recent_events,
     get_saved_graphs,
     get_tone_over_time,
@@ -242,6 +243,16 @@ def actor_location_graph(
     return get_actor_location_graph(event_name, min_edge_weight=min_edge_weight)
 
 
+@app.get("/signals/{event_name}/conflict-phase", tags=["Signals"])
+def conflict_phase(event_name: str) -> dict:
+    """
+    Return the weekly conflict phase history and current trend metrics.
+    Reads from signals_conflict_phase — populated by signal_builder.py.
+    """
+    _validate_event(event_name)
+    return get_conflict_phase(event_name)
+
+
 # ---------------------------------------------------------------------------
 # Dashboard summary endpoints
 # ---------------------------------------------------------------------------
@@ -431,6 +442,7 @@ def _resolve_intent(intent: dict, event_name: str) -> list | dict:
         "tone_over_time":       lambda: get_tone_over_time(event_name, **params),
         "media_attention":      lambda: get_media_attention(event_name, **params),
         "actor_location_graph": lambda: get_actor_location_graph(event_name, **params),
+        "conflict_phase":       lambda: get_conflict_phase(event_name),
         "recent_events":        lambda: get_recent_events(event_name, **params),
     }
 

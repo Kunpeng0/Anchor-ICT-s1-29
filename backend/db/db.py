@@ -2,6 +2,7 @@
 # Query functions for the FastAPI layer.
 # Each function opens a connection, queries the relevant table, and returns
 # a plain list of dicts that FastAPI can serialise directly to JSON.
+# Created, reviewed, tested, and commented by Jesse Ly.
 
 import json
 import logging
@@ -189,6 +190,78 @@ def get_tone_over_time(
             (event_name, period_type),
         )
         return [dict(row) for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_conflict_phase(
+    event_name: str,
+    db_path: str = DB_PATH,
+) -> dict:
+    """
+    Return weekly conflict phase history and the latest trend metrics.
+
+    Parameters
+    ----------
+    event_name : str
+        Key from event_config.EVENTS (e.g. "sudan_2023").
+
+    Returns
+    -------
+    Dict with keys:
+        rows    — list of dicts with keys: period, event_count, avg_goldstein,
+                  violent_share, phase. Ordered by period ascending.
+        current — dict with keys: phase, volume_change, goldstein_change,
+                  violent_share_change. Changes are None if fewer than 12
+                  weeks of data are available.
+    """
+    conn = _connect(db_path)
+    try:
+        cur = conn.execute(
+            """
+            SELECT period, event_count, avg_goldstein, violent_share, phase
+            FROM signals_conflict_phase
+            WHERE event_config = ?
+            ORDER BY period ASC
+            """,
+            (event_name,),
+        )
+        rows = [dict(row) for row in cur.fetchall()]
+
+        # Annotate with a permissive type so static analysis accepts mixed None/float values
+        # alongside concrete str/float assignments below.
+        current: dict[str, object] = {
+            "phase": None,
+            "volume_change": None,
+            "goldstein_change": None,
+            "violent_share_change": None,
+        }
+        if rows:
+            current["phase"] = rows[-1]["phase"]
+            if len(rows) >= 12:
+                # Compare the most recent 4 weeks against the 8 weeks prior to detect
+                # directional trends in volume, intensity, and violent share. Requires
+                # at least 12 weeks of history to produce meaningful deltas.
+                recent = rows[-4:]
+                prior = rows[-12:-4]
+
+                recent_volume_mean = sum(r["event_count"] for r in recent) / len(recent)
+                prior_volume_mean = sum(r["event_count"] for r in prior) / len(prior)
+                recent_goldstein_mean = sum(r["avg_goldstein"] for r in recent if r["avg_goldstein"] is not None) / len(recent)
+                prior_goldstein_mean = sum(r["avg_goldstein"] for r in prior if r["avg_goldstein"] is not None) / len(prior)
+                recent_violent_share_mean = sum(r["violent_share"] for r in recent) / len(recent)
+                prior_violent_share_mean = sum(r["violent_share"] for r in prior) / len(prior)
+
+                # Avoid division by zero if the prior window had no events.
+                volume_change = None
+                if prior_volume_mean != 0:
+                    volume_change = (recent_volume_mean - prior_volume_mean) / prior_volume_mean * 100
+
+                current["volume_change"] = volume_change
+                current["goldstein_change"] = recent_goldstein_mean - prior_goldstein_mean
+                current["violent_share_change"] = recent_violent_share_mean - prior_violent_share_mean
+
+        return {"rows": rows, "current": current}
     finally:
         conn.close()
 
