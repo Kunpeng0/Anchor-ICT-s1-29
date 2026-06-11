@@ -1,124 +1,143 @@
 // Event Volume Chart renders a line chart displaying how many conflict events occurred over time
-import Plot from "react-plotly.js";
+import { useEffect, useState } from 'react'
+import Plot from 'react-plotly.js'
 import { EventVolumePoint, PeriodType } from '@/lib/types'
 
 interface EventVolumeChartProps {
-    periodType: PeriodType
+  eventName: string         // event config key to fetch correct signal data
+  periodType: PeriodType    // controls whether x-axis shows daily or weekly period
 }
 
-// mock data for now
-const mockDaily: EventVolumePoint[] = [
-    {period: '2026-01-01', event_count: 42 },
-    {period: '2026-01-02', event_count: 67 },
-    {period: '2026-01-03', event_count: 32 },
-    {period: '2026-01-04', event_count: 70 },
-    {period: '2026-01-05', event_count: 45 },
-    {period: '2026-01-06', event_count: 34 },
-    {period: '2026-01-07', event_count: 56 },
-    {period: '2026-01-08', event_count: 57 },
-    {period: '2026-01-09', event_count: 65 },
-    {period: '2026-01-10', event_count: 49 },
-]
+// convert raw period strings from the API into readable x-axis labels
+// weekly periods arrive as 'YYYY-WNN' and are shortened to e.g. 'W3 '23'
+function formatPeriodLabel(label: string, periodType: PeriodType) {
+  if (periodType === 'weekly') {
+    const match = label.match(/^(\d{4})-W(\d{2})$/)
+    if (match) return `W${Number(match[2])} '${match[1].slice(2)}`
+  }
+  return label // daily periods are already YYYY-MM-DD, returned as-is
+}
 
-const mockWeekly: EventVolumePoint[] = [
-    {period: '2026-W01', event_count: 300 },
-    {period: '2026-W02', event_count: 400 },
-    {period: '2026-W03', event_count: 367 },
-    {period: '2026-W04', event_count: 235 },
-    {period: '2026-W05', event_count: 304 },
-    {period: '2026-W06', event_count: 450 },
-    {period: '2026-W07', event_count: 421 },
-    {period: '2026-W08', event_count: 367 },
-    {period: '2026-W09', event_count: 432 },
-    {period: '2026-W10', event_count: 411 },
-]
+// get Plotly theme colors from the current dark/light mode
+function getPlotTheme() {
+  const isDark = document.documentElement.classList.contains('dark')
+  return {
+    axisColor: isDark ? '#e5e7eb' : '#9ca3af',
+    labelColor: isDark ? '#f9fafb' : '#6b7280',
+    gridColor: isDark ? 'rgba(148, 163, 184, 0.3)' : 'rgba(243, 244, 246, 0.9)',
+    fillColor: isDark ? 'rgba(76, 110, 245, 0.24)' : 'rgba(76, 110, 245, 0.08)',
+  }
+}
 
-export default function EventVolumeChart({ periodType }: EventVolumeChartProps) {
-    const isDark = document.documentElement.classList.contains('dark')
-    const axisColor = isDark ? '#cbd5e1' : '#9ca3af'
-    const labelColor = isDark ? '#e5e7eb' : '#6b7280'
-    const gridColor = isDark ? 'rgba(148, 163, 184, 0.22)' : 'rgba(243, 244, 246, 0.8)'
+export default function EventVolumeChart({ eventName, periodType }: EventVolumeChartProps) {
+  // chart data fetched from the event-volume signal endpoint
+  const [data, setData] = useState<EventVolumePoint[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-    // selecting which dataset based on period type prop
-    const data = periodType === 'daily' ? mockDaily : mockWeekly
+  // re-fetch whenever eventName or periodType changes so the chart stays in sync
+  useEffect(() => {
+    setLoading(true)
+    setError(null)
+    fetch(`/signals/${eventName}/event-volume?period_type=${periodType}`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return res.json() as Promise<EventVolumePoint[]>
+      })
+      .then((d) => { setData(d); setLoading(false) })
+      .catch((err: Error) => { setError(err.message); setLoading(false) })
+  }, [eventName, periodType])
 
-    // extract x-axis values and y-axis values
-    const xValues = data.map((d) => d.period)
-    const yValues = data.map((d) => d.event_count)
-
-    // function to ensure weekly labels readable
-    const formattedX = xValues.map((label) => {
-        if(periodType === 'weekly'){
-            const [year, week] = label.split('-W')
-            return `W${parseInt(week)} '${year.slice(2)}`
-        }
-        return label
-    })
-
+  // show spinner while data is loading
+  if (loading) {
     return (
-        <Plot
+      <div className="flex h-full items-center justify-center">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-400 border-t-transparent" />
+      </div>
+    )
+  }
+
+  // show inline error if the fetch failed
+  if (error) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-red-500">
+        Failed to load: {error}
+      </div>
+    )
+  }
+
+    // show empty state if the endpoint returned no rows
+  if (data.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-gray-400 dark:text-gray-500">
+        No data available.
+      </div>
+    )
+  }
+
+  const plotTheme = getPlotTheme()
+  // filter to conflict period only: Sudan civil war began April 2023
+  const filtered = data.filter((d) => d.period >= '2023-01-01')
+  const xValues = filtered.map((d) => formatPeriodLabel(d.period, periodType))
+  const yValues = filtered.map((d) => d.event_count)
+  const showMarkers = filtered.length <= 26
+
+// only show dot markers when there are few enough points that they don't overlap
+return (
+    <>
+      <Plot
         data={[
-            {
-                x: formattedX,
-                y: yValues,
-                type: 'scatter',            // scatter mode gives line chart
-                mode: 'lines',              
-                name: 'Event Count',
-                line: {
-                    color: '#4c6ef5',
-                    width: 2.5,
-                    shape: 'spline',
-                    smoothing: 1.3,
-                },
-                fill: 'tozeroy',
-                fillcolor: isDark ? 'rgba(76, 110, 245, 0.18)' : 'rgba(76, 110, 245, 0.08)',
-
-                hovertemplate: '%{x}<br>Events: %{y}<extra></extra>', // controls what appears in tooltip when hovering over a point
-            },
+          {
+            x: xValues,
+            y: yValues,
+            type: 'scatter',    // scatter with mode 'lines' gives a line chart
+            mode: showMarkers ? 'lines+markers' : 'lines',
+            name: 'Event Count',
+            line: { color: '#4c6ef5', width: 2.5 },
+            marker: { color: '#4c6ef5', size: 5 },
+            fill: 'tozeroy',    // fills the area between the line and y=0
+            fillcolor: plotTheme.fillColor,
+            hovertemplate: '%{x}<br>Events: %{y}<extra></extra>', // tooltip format on hover
+          },
         ]}
-        // layout controls overall chart appearance
         layout={{
-            autosize: true,
-            margin: { t: 10, r: 32, b: 100, l: 48},
-            paper_bgcolor: 'transparent',
-            plot_bgcolor: 'transparent',
-            font: {
-                family: 'Inter, system-ui, sans-serif',
-                size: 12,
-                color: labelColor
+          autosize: true,
+          margin: { t: 10, r: 24, b: 48, l: 56 },
+          paper_bgcolor: 'transparent', // inherits card background
+          plot_bgcolor: 'transparent',
+          font: { family: 'Inter, system-ui, sans-serif', size: 12, color: plotTheme.labelColor },
+          xaxis: {
+            automargin: true,
+            nticks: 7,          // limit tick count so labels don't crowd on smaller containers
+            tickangle: 0,
+            showgrid: false,    // no vertical grid lines; keeps the chart clean
+            zeroline: false,
+            tickfont: { size: 11, color: plotTheme.axisColor },
+            showline: false,
+          },
+          yaxis: {
+            automargin: true,
+            showgrid: true,     // horizontal grid lines aid reading values
+            gridcolor: plotTheme.gridColor,
+            zeroline: false,
+            tickfont: { size: 11, color: plotTheme.axisColor },
+            title: {
+              text: 'Event Count',
+              font: { size: 11, color: plotTheme.axisColor },
+              standoff: 12,    // gap between axis title and tick labels
             },
-
-            xaxis: {
-                tickangle: 0,
-                showgrid: false,
-                zeroline: false,
-                tickfont: { size: 11, color: axisColor },
-                showline: false,
-            },
-
-            yaxis: {
-                rangemode: 'normal',
-                showgrid: true,
-                gridcolor: gridColor,
-                zeroline: false,
-                tickfont: { size: 11, color: axisColor },
-                title: {
-                    text: 'Event Count',
-                    font: { size: 11, color: axisColor },
-                    standoff: 20,
-                },
-            },
-            showlegend: false,
-            hovermode: 'x unified'
+          },
+          showlegend: false,
+          hovermode: 'x unified', // snaps hover tooltip to the nearest x value across all traces
         }}
-        // controls interactive behaviours and plotly toolbar
-        config={{
-            responsive: true,
-            displayModeBar: false,
-        }}
-
+        config={{ responsive: true, displayModeBar: false }}
         useResizeHandler
         style={{ width: '100%', height: '100%' }}
-        />
-    )
+      />
+      {/* Plotly zoom hint */}
+      <p className="mt-1.5 text-center text-[11px] text-gray-400 dark:text-gray-600">
+        Click and drag to zoom · Double-click to reset
+      </p>
+    </>
+  )
 }

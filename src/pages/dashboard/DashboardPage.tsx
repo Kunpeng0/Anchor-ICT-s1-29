@@ -212,7 +212,7 @@ function SavedGraphCard({
  
 // Page
 export default function DashboardPage() {
-  const [periodType, setPeriodType] = useState<PeriodType>('daily')
+  const [periodType, setPeriodType] = useState<PeriodType>('weekly')
  
   return (
     <div className="space-y-6">
@@ -226,11 +226,11 @@ export default function DashboardPage() {
       {/* Period toggle */}
       <div className="flex items-center gap-2">
         <span className="text-sm text-gray-500 dark:text-gray-400">View by:</span>
-        <button onClick={() => setPeriodType('daily')} className={periodType === 'daily' ? 'btn-primary' : 'btn-secondary'}>
-          Daily
-        </button>
         <button onClick={() => setPeriodType('weekly')} className={periodType === 'weekly' ? 'btn-primary' : 'btn-secondary'}>
           Weekly
+        </button>
+        <button onClick={() => setPeriodType('daily')} className={periodType === 'daily' ? 'btn-primary' : 'btn-secondary'}>
+          Daily
         </button>
       </div>
  
@@ -238,14 +238,14 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 gap-6">
         <div className="card">
           <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Conflict Timeline</h2>
-          <div className="mt-4 h-56">
-            <EventVolumeChart periodType={periodType} />
+          <div className="mt-4 h-80">
+            <EventVolumeChart periodType={periodType} eventName={EVENT_NAME} />
           </div>
         </div>
         <div className="card">
           <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Conflict Breakdown</h2>
-          <div className="mt-4 h-56">
-            <EventTypeChart />
+          <div className="mt-4 h-80">
+            <EventTypeChart eventName={EVENT_NAME} />
           </div>
         </div>
       </div>
